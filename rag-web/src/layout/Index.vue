@@ -1,5 +1,8 @@
 <template>
   <el-container class="layout-container">
+    <!-- 跳过导航链接（无障碍支持） -->
+    <a href="#main-content" class="skip-link">跳转到主内容</a>
+
     <el-aside width="220px" class="layout-aside">
       <div class="logo-box">
         <el-icon class="logo-icon"><Reading /></el-icon>
@@ -57,7 +60,7 @@
         </div>
       </el-header>
 
-      <el-main class="layout-main">
+      <el-main class="layout-main" id="main-content" tabindex="-1">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -128,5 +131,36 @@ const handleCommand = async (command: string) => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 跳过导航链接样式 */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  padding: 8px 16px;
+  background: #2563EB;
+  color: white;
+  border-radius: 8px;
+  z-index: 9999;
+  transition: top 0.2s ease;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 16px;
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
+
+/* 主内容区域焦点样式 */
+.layout-main:focus {
+  outline: none;
+}
+
+.layout-main:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: -2px;
 }
 </style>
