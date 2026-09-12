@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(New-Item -ItemType Directory -Force -Path \"D:\\\\workspace\\\\Java\\\\RAG\\\\rag-web\\\\src\\\\{api,assets\\\\css,assets\\\\images,components,composables,layout,router,stores,types,utils,views\\\\{auth,knowledge-base,document,chat\\\\}}\" | Out-Null; Write-Host \"Directory structure created\")",
-      "Bash(mvn install *)"
+      "Bash(mvn install *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'fix: P1-2 reorder upload flow to prevent zombie files and data inconsistency *)"
     ]
   }
 }

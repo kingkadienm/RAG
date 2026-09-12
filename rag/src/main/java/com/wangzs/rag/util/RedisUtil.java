@@ -66,4 +66,11 @@ public class RedisUtil {
     public Boolean hasKey(String key) {
         return redisTemplate.hasKey(key);
     }
+
+    /**
+     * 原子 set-if-absent（SETNX），返回 true 表示设置成功（首次）
+     */
+    public Boolean setIfAbsent(String key, String value, long timeoutSeconds) {
+        return redisTemplate.opsForValue().setIfAbsent(key, value, timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+    }
 }

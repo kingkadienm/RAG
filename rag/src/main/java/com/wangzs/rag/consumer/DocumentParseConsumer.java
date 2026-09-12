@@ -10,6 +10,7 @@ import com.wangzs.rag.service.ConfigService;
 import com.wangzs.rag.service.DocumentService;
 import com.wangzs.rag.service.EmbeddingService;
 import com.wangzs.rag.service.FileParseService;
+import com.wangzs.rag.util.RedisUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
@@ -43,6 +44,7 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
     private final DocumentService documentService;
     private final S3Client s3Client;
     private final ConfigService configService;
+    private final RedisUtil redisUtil;
 
     @Value("${file.storage.type:local}")
     private String storageType;
@@ -75,7 +77,20 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
         Integer msgVersion = message.getVersion();
         log.info("开始处理文档解析: docId={}, msgVersion={}", docId, msgVersion);
 
-        // 1. 查询最新的文档数据
+        // 0. 幂等去重：同一 (docId, version) 的消息只处理一次
+        String dedupKey = "rag:msg:dedup:" + docId + ":" + msgVersion;
+        if (redisUtil.hasKey(dedupKey)) {
+            log.warn("忽略重复解析消息: docId={}, msgVersion={}", docId, msgVersion);
+            return;
+        }
+        // 原子标记（SETNX），TTL 24h 防止 Redis 内存泄漏
+        Boolean marked = redisUtil.setIfAbsent(dedupKey, "1", 86400);
+        if (marked == null || !marked) {
+            log.warn("去重标记设置失败（并发冲突），跳过处理: docId={}, msgVersion={}", docId, msgVersion);
+            return;
+        }
+
+        // 2. 版本比对，实现严格幂等（拦截乱序或过时消息）
         Document doc;
         try {
             doc = documentService.getById(docId);
@@ -84,7 +99,7 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
             return;
         }
 
-        // 2. 版本比对，实现严格幂等（拦截乱序或过时消息）
+        // 3. 比较消息版本与当前文档版本
         if (msgVersion != null && doc.getVersion() != null && msgVersion < doc.getVersion()) {
             log.warn("忽略历史过时解析消息: docId={}, msgVersion={}, currentVersion={}",
                     docId, msgVersion, doc.getVersion());
