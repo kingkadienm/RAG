@@ -5,9 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -44,24 +44,20 @@ public class RetrievalService {
         SearchRequest.Builder builder = SearchRequest.builder()
                 .query(queryText)
                 .topK(topK);
-//                .similarityThreshold(similarityThreshold);
+
+        // 将 kb_id 过滤下推到 PGVector SQL 层，避免内存过滤导致 topK 被耗尽
+        if (kbIds != null && !kbIds.isEmpty()) {
+            FilterExpressionBuilder filterBuilder = new FilterExpressionBuilder();
+            builder.filterExpression(filterBuilder.in("kb_id", kbIds).build());
+        }
 
         SearchRequest request = builder.build();
         List<Document> results = vectorStore.similaritySearch(request);
 
-        // 过滤元数据（按知识库 ID）
-        List<SearchResult> filtered = new ArrayList<>();
-        for (Document doc : results) {
-            Map<String, Object> metadata = doc.getMetadata();
-            Long kbId = metadata != null ? (Long) metadata.get("kb_id") : null;
-
-            if (kbIds == null || kbIds.isEmpty() || (kbId != null && kbIds.contains(kbId))) {
-                filtered.add(SearchResult.from(doc));
-            }
-        }
-
-        log.info("向量检索完成: query={}, results={}", queryText, filtered.size());
-        return filtered;
+        log.info("向量检索完成: query={}, results={}", queryText, results.size());
+        return results.stream()
+                .map(SearchResult::from)
+                .toList();
     }
 
     /**
