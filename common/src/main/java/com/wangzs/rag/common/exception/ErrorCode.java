@@ -18,6 +18,7 @@ public enum ErrorCode {
     USER_PASSWORD_ERROR(1002, "密码错误"),
     USER_ALREADY_EXISTS(1003, "用户已存在"),
     USER_DISABLED(1004, "用户已被禁用"),
+    USER_NOT_LOGIN(1005, "未登录"),
 
     // ==================== 知识库相关 ====================
     KNOWLEDGE_BASE_NOT_FOUND(2001, "知识库不存在"),
@@ -40,11 +41,16 @@ public enum ErrorCode {
     FILE_MD5_DUPLICATE(4005, "文件已存在（MD5 重复）"),
     FILE_UPLOAD_FAILED(4006, "文件上传失败"),
     FILE_DELETE_FAILED(4007, "文件删除失败"),
+    FILE_STORAGE_ERROR(4009, "文件存储服务异常"),
     FILE_CHECK_FAILED(4008, "文件校验失败"),
 
     // ==================== 解析相关 ====================
     PARSE_FAILED(5001, "文件解析失败"),
     PARSE_UNSUPPORTED_TYPE(5002, "不支持的文件格式"),
+
+    // ==================== 系统/配置相关 ====================
+    CONFIG_NOT_FOUND(8001, "配置项不存在"),
+    CONFIG_SYSTEM_PROTECTED(8002, "系统配置项不可删除"),
 
     // ==================== 向量相关 ====================
     EMBEDDING_FAILED(6001, "向量化失败"),

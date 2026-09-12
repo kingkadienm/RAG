@@ -1,5 +1,7 @@
 package com.wangzs.rag.util;
 
+import com.wangzs.rag.common.exception.BizException;
+import com.wangzs.rag.common.exception.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -50,7 +52,8 @@ public class MD5Util {
             byte[] digest = md.digest();
             return bytesToHex(digest);
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("MD5 algorithm not available", e);
+            log.error("MD5 算法不可用", e);
+            throw BizException.of(ErrorCode.SYSTEM_ERROR.getCode(), "MD5 算法不可用");
         }
     }
 

@@ -76,7 +76,7 @@ public class FileStorageLocalServiceImpl implements IFileStorageService {
     public FileUploadVO upload(MultipartFile file, String path) {
 
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("上传文件为空");
+            throw BizException.of(ErrorCode.FILE_EMPTY);
         }
 
         String originalFileName = file.getOriginalFilename();
@@ -98,7 +98,7 @@ public class FileStorageLocalServiceImpl implements IFileStorageService {
         if (!directory.exists()) {
             boolean created = directory.mkdirs();
             if (!created) {
-                throw new RuntimeException("创建上传目录失败: " + directory.getAbsolutePath());
+                throw BizException.of(ErrorCode.FILE_UPLOAD_FAILED.getCode(), "创建上传目录失败: " + directory.getAbsolutePath());
             }
         }
 
@@ -111,7 +111,7 @@ public class FileStorageLocalServiceImpl implements IFileStorageService {
                 FileUtils.deleteQuietly(targetFile);
             }
             log.error("本地文件上传失败", e);
-            throw new RuntimeException("文件上传失败: " + e.getMessage(), e);
+            throw BizException.of(ErrorCode.FILE_UPLOAD_FAILED.getCode(), e.getMessage());
         }
 
         FileUploadVO vo = new FileUploadVO();
@@ -154,17 +154,17 @@ public class FileStorageLocalServiceImpl implements IFileStorageService {
     @Override
     public InputStream getInputStream(String fileKey) {
         if (StringUtils.isBlank(fileKey)) {
-            throw new IllegalArgumentException("文件 key 不能为空");
+            throw BizException.of(ErrorCode.FILE_NAME_INVALID.getCode(), "文件 key 不能为空");
         }
         String fullPath = getUploadPath() + fileKey;
         File file = new File(fullPath);
         if (!file.exists() || !file.isFile()) {
-            throw BizException.of(3001, "文件不存在: " + fullPath);
+            throw BizException.of(ErrorCode.FILE_STORAGE_ERROR.getCode(), "文件不存在: " + fullPath);
         }
         try {
             return new FileInputStream(file);
         } catch (IOException e) {
-            throw BizException.of(4006, "读取文件失败: " + e.getMessage());
+            throw BizException.of(ErrorCode.FILE_UPLOAD_FAILED.getCode(), "读取文件失败: " + e.getMessage());
         }
     }
 }

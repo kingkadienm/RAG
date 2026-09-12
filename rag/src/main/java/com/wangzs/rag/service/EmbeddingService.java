@@ -1,6 +1,8 @@
 package com.wangzs.rag.service;
 
 import com.wangzs.rag.chunk.Chunk;
+import com.wangzs.rag.common.exception.BizException;
+import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.mapper.DocumentMapper;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +69,7 @@ public class EmbeddingService {
 
         } catch (Exception e) {
             log.error("向量化失败: docId={}", doc.getId(), e);
-            throw new RuntimeException("向量化失败: " + e.getMessage(), e);
+            throw BizException.of(ErrorCode.EMBEDDING_FAILED);
         }
     }
 

@@ -1,6 +1,8 @@
 package com.wangzs.rag.controller.auth;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.wangzs.rag.common.exception.BizException;
+import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
 import com.wangzs.rag.model.entity.User;
 import com.wangzs.rag.mapper.UserMapper;
@@ -33,15 +35,15 @@ public class AuthController {
     public ApiResult<Map<String, Object>> login(@Valid @RequestBody LoginRequest request) {
         User user = userMapper.selectByUsername(request.getUsername());
         if (user == null || user.getDeleted() == 1) {
-            throw new RuntimeException("用户不存在或已删除");
+            throw BizException.of(ErrorCode.USER_NOT_FOUND);
         }
 
         if (user.getStatus() == 2) {
-            throw new RuntimeException("用户已被禁用");
+            throw BizException.of(ErrorCode.USER_DISABLED);
         }
 
         if (!PasswordUtil.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("密码错误");
+            throw BizException.of(ErrorCode.USER_PASSWORD_ERROR);
         }
 
         StpUtil.login(user.getId());
@@ -61,7 +63,7 @@ public class AuthController {
     public ApiResult<Void> register(@Valid @RequestBody RegisterRequest request) {
         User exist = userMapper.selectByUsername(request.getUsername());
         if (exist != null && exist.getDeleted() == 0) {
-            throw new RuntimeException("用户名已存在");
+            throw BizException.of(ErrorCode.USER_ALREADY_EXISTS);
         }
 
         User user = new User();
@@ -99,7 +101,7 @@ public class AuthController {
 
     private Long getUserId() {
         if (!StpUtil.isLogin()) {
-            throw new RuntimeException("未登录");
+            throw BizException.of(ErrorCode.USER_NOT_LOGIN);
         }
         Object loginId = StpUtil.getLoginId();
         return loginId instanceof Long ? (Long) loginId : Long.parseLong(loginId.toString());

@@ -1,6 +1,8 @@
 package com.wangzs.rag.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.wangzs.rag.common.exception.BizException;
+import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.mapper.ConfigMapper;
 import com.wangzs.rag.model.entity.Config;
 import lombok.RequiredArgsConstructor;
@@ -163,7 +165,7 @@ public class ConfigService {
                         .eq(Config::getDeleted, 0)
         );
         if (config == null) {
-            throw new IllegalArgumentException("配置项不存在: " + key);
+            throw BizException.of(ErrorCode.CONFIG_NOT_FOUND);
         }
         config.setConfigValue(value);
         configMapper.updateById(config);
@@ -188,10 +190,10 @@ public class ConfigService {
     public void delete(Long id) {
         Config config = configMapper.selectById(id);
         if (config == null) {
-            throw new IllegalArgumentException("配置项不存在: id=" + id);
+            throw BizException.of(ErrorCode.CONFIG_NOT_FOUND);
         }
         if (config.getIsSystem() == 1) {
-            throw new IllegalArgumentException("系统配置项不可删除: " + config.getConfigKey());
+            throw BizException.of(ErrorCode.CONFIG_SYSTEM_PROTECTED);
         }
         config.setDeleted(1);
         configMapper.updateById(config);
@@ -214,7 +216,7 @@ public class ConfigService {
     public Config getById(Long id) {
         Config config = configMapper.selectById(id);
         if (config == null || config.getDeleted() == 1) {
-            throw new IllegalArgumentException("配置项不存在: id=" + id);
+            throw BizException.of(ErrorCode.CONFIG_NOT_FOUND);
         }
         return config;
     }

@@ -1,5 +1,7 @@
 package com.wangzs.rag.service.file;
 
+import com.wangzs.rag.common.exception.BizException;
+import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.config.S3Config;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -47,7 +49,7 @@ public class FileStorageCloudServiceImpl implements IFileStorageService {
     public FileUploadVO upload(org.springframework.web.multipart.MultipartFile file, String path) {
         String originalFileName = file.getOriginalFilename();
         if (StringUtils.isBlank(originalFileName)) {
-            throw new IllegalArgumentException("上传文件名为空");
+            throw BizException.of(ErrorCode.FILE_NAME_INVALID);
         }
 
         // 生成文件 key: path + UUID + 时间戳 + 扩展名
@@ -80,7 +82,7 @@ public class FileStorageCloudServiceImpl implements IFileStorageService {
             s3Client.putObject(putObjectRequest, RequestBody.fromBytes(file.getBytes()));
         } catch (IOException e) {
             log.error("S3 文件上传失败", e);
-            throw new RuntimeException("文件上传失败: " + e.getMessage(), e);
+            throw BizException.of(ErrorCode.FILE_UPLOAD_FAILED.getCode(), e.getMessage());
         }
 
         FileUploadVO vo = new FileUploadVO();
@@ -133,7 +135,7 @@ public class FileStorageCloudServiceImpl implements IFileStorageService {
     @Override
     public InputStream getInputStream(String fileKey) {
         if (StringUtils.isBlank(fileKey)) {
-            throw new IllegalArgumentException("文件 key 不能为空");
+            throw BizException.of(ErrorCode.FILE_NAME_INVALID.getCode(), "文件 key 不能为空");
         }
         try {
             return s3Client.getObject(GetObjectRequest.builder()
@@ -141,7 +143,7 @@ public class FileStorageCloudServiceImpl implements IFileStorageService {
                     .key(fileKey)
                     .build());
         } catch (Exception e) {
-            throw new RuntimeException("读取 S3 文件失败: " + e.getMessage(), e);
+            throw BizException.of(ErrorCode.FILE_UPLOAD_FAILED.getCode(), "读取 S3 文件失败: " + e.getMessage());
         }
     }
 

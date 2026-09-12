@@ -1,5 +1,7 @@
 package com.wangzs.rag.strategy;
 
+import com.wangzs.rag.common.exception.BizException;
+import com.wangzs.rag.common.exception.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
@@ -50,7 +52,7 @@ public class TikaParseStrategy implements FileParseStrategy {
             return text;
         } catch (Exception e) {
             log.error("Tika 解析失败: fileName={}", fileName, e);
-            throw new RuntimeException("文件解析失败: " + e.getMessage(), e);
+            throw BizException.of(ErrorCode.PARSE_FAILED);
         }
     }
 
