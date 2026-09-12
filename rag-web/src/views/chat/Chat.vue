@@ -126,7 +126,6 @@
               按 Ctrl+Enter 发送消息
             </span>
             <el-button
-                type="primary"
                 :icon="Promotion"
                 :loading="sending"
                 :disabled="!inputMessage.trim() || !selectedKbId"
@@ -182,10 +181,35 @@ const fetchKbList = async () => {
   }
 }
 
+/**
+ * 知识库切换确认对话框
+ */
 const onKbChange = () => {
-  currentSessionId.value = ''
-  messages.value = []
-  fetchSessions()
+  // 如果当前有消息，询问用户是否确认切换
+  if (messages.value.length > 0 && selectedKbId.value !== currentSessionId.value) {
+    ElMessageBox.confirm(
+      '切换知识库将清空当前对话，是否继续？',
+      '确认切换',
+      {
+        confirmButtonText: '确定切换',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    ).then(() => {
+      currentSessionId.value = ''
+      messages.value = []
+      fetchSessions()
+    }).catch(() => {
+      // 恢复选择（如果取消）
+      if (currentKbId.value) {
+        selectedKbId.value = currentKbId.value
+      }
+    })
+  } else {
+    currentSessionId.value = ''
+    messages.value = []
+    fetchSessions()
+  }
 }
 
 const fetchSessions = async () => {

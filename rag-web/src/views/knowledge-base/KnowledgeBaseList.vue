@@ -10,7 +10,13 @@
         </div>
       </template>
 
-      <el-table :data="kbList" style="width: 100%" v-loading="loading">
+      <el-table
+        :data="kbList"
+        style="width: 100%"
+        v-loading="loading"
+        :row-class-name="'table-row'"
+        @keydown.enter="handleRowAction"
+      >
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="名称" min-width="200" />
         <el-table-column prop="description" label="描述" show-overflow-tooltip min-width="250" />
@@ -31,6 +37,7 @@
               size="small"
               :icon="Document"
               @click="goToDocuments(row)"
+              aria-label="查看知识库文档"
             >
               文档
             </el-button>
@@ -39,6 +46,7 @@
               size="small"
               :icon="ChatDotRound"
               @click="goToChat(row)"
+              aria-label="在知识库中开始对话"
             >
               对话
             </el-button>
@@ -47,6 +55,7 @@
               size="small"
               :icon="Delete"
               @click="handleDelete(row)"
+              :aria-label="`删除知识库 ${row.name}`"
             >
               删除
             </el-button>
@@ -118,6 +127,22 @@ const rules: FormRules = {
 const formatDate = (date: string) => {
   if (!date) return '-'
   return new Date(date).toLocaleString('zh-CN')
+}
+
+/**
+ * 处理表格行的键盘操作
+ * Enter 键：查看文档
+ * Delete 键：删除知识库
+ */
+const handleRowAction = (event: KeyboardEvent, row: any) => {
+  // 键盘快捷键提示
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    goToDocuments(row)
+  } else if (event.key === 'Delete' || event.key === 'Backspace') {
+    event.preventDefault()
+    handleDelete(row)
+  }
 }
 
 const showCreateDialog = () => {

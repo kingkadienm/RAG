@@ -17,7 +17,13 @@
         </div>
       </template>
 
-      <el-table :data="docList" style="width: 100%" v-loading="loading">
+      <el-table
+        :data="docList"
+        style="width: 100%"
+        v-loading="loading"
+        :row-class-name="'table-row'"
+        @keydown.enter="handleRowAction"
+      >
         <el-table-column label="文件" min-width="300">
           <template #default="{ row }">
             <div style="display: flex; align-items: center; gap: 12px">
@@ -171,6 +177,25 @@ const formatSize = (bytes: number) => {
 const formatDate = (d: string) => {
   if (!d) return '-'
   return new Date(d).toLocaleString('zh-CN')
+}
+
+/**
+ * 处理表格行的键盘操作
+ * Enter 键：查看分块（如果有分块）
+ * Delete 键：删除文档
+ */
+const handleRowAction = (event: KeyboardEvent, row: DocType) => {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    if (row.chunkCount > 0) {
+      showChunks(row)
+    } else {
+      ElMessage.info('该文档暂无分块数据')
+    }
+  } else if (event.key === 'Delete' || event.key === 'Backspace') {
+    event.preventDefault()
+    handleDelete(row)
+  }
 }
 
 const fetchList = async () => {
