@@ -77,6 +77,11 @@ public interface DocumentService extends IService<Document> {
     void updateVectorStatus(Long id, VectorStatusEnum status, Integer vectorCount, String errorMsg);
 
     /**
+     * 更新文档存储路径（局部更新）
+     */
+    void updateFilePath(Long id, String filePath);
+
+    /**
      * 逻辑删除文档
      */
     void delete(Long id);

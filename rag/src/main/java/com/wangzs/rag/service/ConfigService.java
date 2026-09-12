@@ -35,9 +35,9 @@ public class ConfigService {
     /** 本地缓存：key → Config */
     private final Map<String, Config> cache = new ConcurrentHashMap<>();
 
-    /** 缓存刷新间隔（秒），默认 60s */
-    @Value("${rag.config.refresh-interval-seconds:60}")
-    private long refreshIntervalSeconds;
+    /** 缓存刷新间隔（毫秒），默认 60s */
+    @Value("${rag.config.refresh-interval-ms:60000}")
+    private long refreshIntervalMs;
 
     // ===================================================================
     //  生命周期：启动加载 + 定时刷新
@@ -54,7 +54,7 @@ public class ConfigService {
     /**
      * 定时刷新缓存
      */
-    @Scheduled(fixedRateString = "${rag.config.refresh-interval-seconds:60} * 1000")
+    @Scheduled(fixedRateString = "${rag.config.refresh-interval-ms:60000}")
     public void scheduledRefresh() {
         try {
             refreshCache();

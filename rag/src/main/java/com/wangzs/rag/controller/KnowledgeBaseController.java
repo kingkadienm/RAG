@@ -45,6 +45,9 @@ public class KnowledgeBaseController {
     @GetMapping("/{id}")
     public ApiResult<KnowledgeBase> getById(@PathVariable Long id) {
         KnowledgeBase kb = knowledgeBaseService.getById(id);
+        if (!getLoginUserId().equals(kb.getCreatorId())) {
+            throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
+        }
         return ApiResult.success(kb);
     }
 
@@ -70,13 +73,21 @@ public class KnowledgeBaseController {
     @PutMapping("/{id}")
     public ApiResult<KnowledgeBase> update(@PathVariable Long id,
                                            @RequestBody KnowledgeBaseCreateDTO dto) {
-        KnowledgeBase kb = knowledgeBaseService.update(id, dto.getName(), dto.getDescription());
+        KnowledgeBase kb = knowledgeBaseService.getById(id);
+        if (!getLoginUserId().equals(kb.getCreatorId())) {
+            throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
+        }
+        kb = knowledgeBaseService.update(id, dto.getName(), dto.getDescription());
         return ApiResult.success(kb, "更新成功");
     }
 
     @Operation(summary = "删除知识库")
     @DeleteMapping("/{id}")
     public ApiResult<Void> delete(@PathVariable Long id) {
+        KnowledgeBase kb = knowledgeBaseService.getById(id);
+        if (!getLoginUserId().equals(kb.getCreatorId())) {
+            throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
+        }
         knowledgeBaseService.delete(id);
         return ApiResult.success(null, "删除成功");
     }
@@ -86,6 +97,10 @@ public class KnowledgeBaseController {
     public ApiResult<Page<?>> listDocuments(@PathVariable Long kbId,
                                             @RequestParam(name = "pageNum", defaultValue = "1") int pageNum,
                                             @RequestParam(name = "pageSize", defaultValue = "10") int pageSize) {
+        KnowledgeBase kb = knowledgeBaseService.getById(kbId);
+        if (!getLoginUserId().equals(kb.getCreatorId())) {
+            throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
+        }
         Page<?> page = documentService.pageByKbId(kbId, pageNum, pageSize);
         return ApiResult.success(page);
     }

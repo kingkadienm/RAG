@@ -37,28 +37,12 @@ public class DocumentRetryScheduler {
     private final RocketMQTemplate rocketMQTemplate;
     private final ObjectMapper objectMapper;
 
-    /** 惰性加载 */
-    private volatile int maxAttempts = 3;
-    private volatile boolean configLoaded = false;
-
-    private void ensureConfigLoaded() {
-        if (!configLoaded) {
-            synchronized (this) {
-                if (!configLoaded) {
-                    maxAttempts = configService.getInt("rag.retry.max-attempts", 3);
-                    configLoaded = true;
-                    log.info("重试配置已加载: maxAttempts={}", maxAttempts);
-                }
-            }
-        }
-    }
 
     /**
      * 自动重试失败/卡住的文档（每 5 分钟执行一次）
      */
-    @Scheduled(fixedRateString = "5 * 60 * 1000")
+    @Scheduled(fixedRate = 300000L)
     public void autoRetryFailedDocuments() {
-        ensureConfigLoaded();
         log.debug("开始扫描待重试文档...");
 
         // 查询解析失败（parseStatus=3）或向量化失败（vectorStatus=3）的文档
@@ -80,9 +64,9 @@ public class DocumentRetryScheduler {
 
         for (Document doc : failedDocs) {
             int retryCount = countRetries(doc);
-            if (retryCount >= maxAttempts) {
+            if (retryCount >= configService.getInt("rag.retry.max-attempts", 3)) {
                 log.warn("文档已达最大重试次数，跳过: docId={}, retries={}/{}, errorMsg={}",
-                        doc.getId(), retryCount, maxAttempts, doc.getErrorMsg());
+                        doc.getId(), retryCount, configService.getInt("rag.retry.max-attempts", 3), doc.getErrorMsg());
                 continue;
             }
 
@@ -98,10 +82,8 @@ public class DocumentRetryScheduler {
     /**
      * 扫描长时间处于"解析中"状态的文档（可能是消费者崩溃导致的消息丢失）
      */
-    @Scheduled(fixedRateString = "5 * 60 * 1000")
+    @Scheduled(fixedRate = 300000L)
     public void retryStuckDocuments() {
-        ensureConfigLoaded();
-
         LambdaQueryWrapper<Document> wrapper = new LambdaQueryWrapper<Document>()
                 .eq(Document::getDeleted, 0)
                 .eq(Document::getParseStatus, 1);

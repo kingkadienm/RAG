@@ -1,5 +1,6 @@
 package com.wangzs.rag.controller;
 
+import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.stp.StpUtil;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
@@ -25,11 +26,34 @@ import java.util.List;
 @RequestMapping("/api/chat/sessions")
 @RequiredArgsConstructor
 @Slf4j
+@SaCheckLogin
 public class ChatSessionController {
 
     private final ChatService chatService;
     private final ChatSessionMapper chatSessionMapper;
     private final ChatMessageMapper chatMessageMapper;
+
+    /** 获取当前登录用户 ID */
+    private Long getLoginUserId() {
+        Object loginId = StpUtil.getLoginId();
+        return loginId instanceof Long ? (Long) loginId : Long.parseLong(loginId.toString());
+    }
+
+    /** 校验会话归属：返回会话实体，非归属用户抛出 NOT_FOUND */
+    private ChatSession verifySessionOwnership(String sessionId) {
+        ChatSession session = chatSessionMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatSession>()
+                        .eq(ChatSession::getSessionId, sessionId)
+                        .eq(ChatSession::getDeleted, 0)
+        );
+        if (session == null) {
+            throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
+        }
+        if (!getLoginUserId().equals(session.getUserId())) {
+            throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
+        }
+        return session;
+    }
 
     /**
      * 查询当前用户的会话列表
@@ -52,6 +76,7 @@ public class ChatSessionController {
     @Operation(summary = "查询会话消息")
     @GetMapping("/{sessionId}/messages")
     public ApiResult<List<ChatMessage>> getMessages(@PathVariable String sessionId) {
+        verifySessionOwnership(sessionId);
         List<ChatMessage> messages = chatService.listMessages(sessionId);
         return ApiResult.success(messages);
     }
@@ -62,6 +87,7 @@ public class ChatSessionController {
     @Operation(summary = "删除会话")
     @DeleteMapping("/{sessionId}")
     public ApiResult<Void> delete(@PathVariable String sessionId) {
+        verifySessionOwnership(sessionId);
         chatService.deleteSession(sessionId);
         return ApiResult.success(null, "删除成功");
     }

@@ -1,5 +1,6 @@
 package com.wangzs.rag.controller;
 
+import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.stp.StpUtil;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
@@ -9,7 +10,6 @@ import com.wangzs.rag.enums.VectorStatusEnum;
 import com.wangzs.rag.model.dto.ChunkVO;
 import com.wangzs.rag.model.dto.DocumentParseMsgDTO;
 import com.wangzs.rag.model.entity.Document;
-import com.wangzs.rag.mapper.DocumentMapper;
 import com.wangzs.rag.service.DocumentService;
 import com.wangzs.rag.service.FileParseService;
 import com.wangzs.rag.service.FileStorageService;
@@ -42,34 +42,31 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/doc")
 @RequiredArgsConstructor
 @Slf4j
+@SaCheckLogin
 public class DocumentController {
 
     private final DocumentService documentService;
-    private final DocumentMapper documentMapper;
     private final FileParseService fileParseService;
     private final FileStorageService fileStorageService;
     private final ConfigService configService;
     private final RocketMQTemplate rocketMQTemplate;
     private final ObjectMapper objectMapper;
 
-    /**
-     * 惰性加载
-     */
-    private volatile String parseTopic;
-    private volatile String storageType;
-    private volatile boolean configLoaded = false;
-
-    private void ensureConfigLoaded() {
-        if (!configLoaded) {
-            synchronized (this) {
-                if (!configLoaded) {
-                    parseTopic = configService.getString("rag.rocketmq.topic", "rag-document-parse");
-                    storageType = configService.getString("file.storage.type", "local");
-                    configLoaded = true;
-                }
-            }
-        }
+    /** 获取当前登录用户 ID */
+    private Long getLoginUserId() {
+        Object loginId = StpUtil.getLoginId();
+        return loginId instanceof Long ? (Long) loginId : Long.parseLong(loginId.toString());
     }
+
+    /** 校验文档归属：返回文档实体，非归属用户抛出 NOT_FOUND */
+    private Document verifyDocumentOwnership(Long docId) {
+        Document doc = documentService.getById(docId);
+        if (!getLoginUserId().equals(doc.getCreatorId())) {
+            throw BizException.of(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        return doc;
+    }
+
 
     // ==================== 查询接口 ====================
 
@@ -79,7 +76,7 @@ public class DocumentController {
     @Operation(summary = "查询文档详情")
     @GetMapping("/{id}")
     public ApiResult<Document> getById(@PathVariable Long id) {
-        Document doc = documentService.getById(id);
+        Document doc = verifyDocumentOwnership(id);
         return ApiResult.success(doc);
     }
 
@@ -89,7 +86,7 @@ public class DocumentController {
     @Operation(summary = "查询文档分块内容")
     @GetMapping("/{id}/chunks")
     public ApiResult<List<ChunkVO>> getChunks(@PathVariable Long id) {
-        Document doc = documentService.getById(id);
+        Document doc = verifyDocumentOwnership(id);
 
         if (doc.getParseStatus() != ParseStatusEnum.SUCCESS) {
             throw BizException.of(ErrorCode.DOCUMENT_PARSE_FAILED);
@@ -121,7 +118,7 @@ public class DocumentController {
     @Operation(summary = "查询文档解析进度")
     @GetMapping("/{id}/parse-status")
     public ApiResult<Map<String, Object>> getParseStatus(@PathVariable Long id) {
-        Document doc = documentService.getById(id);
+        Document doc = verifyDocumentOwnership(id);
 
         String stage;
         int progress;
@@ -200,12 +197,7 @@ public class DocumentController {
     @Operation(summary = "重试解析文档")
     @PostMapping("/{id}/retry")
     public ApiResult<Void> retryParse(@PathVariable Long id) {
-        ensureConfigLoaded();
-
-        Document doc = documentService.getById(id);
-        if (doc.getDeleted() == 1) {
-            throw BizException.of(ErrorCode.DOCUMENT_NOT_FOUND);
-        }
+        Document doc = verifyDocumentOwnership(id);
 
         // 重置状态为待解析
         documentService.updateParseStatus(id, ParseStatusEnum.INIT, 0, null);
@@ -224,8 +216,8 @@ public class DocumentController {
     @DeleteMapping("/{id}")
     public ApiResult<Void> delete(@PathVariable Long id) {
         // 删除物理文件
-        Document doc = documentMapper.selectById(id);
-        if (doc != null && doc.getFilePath() != null) {
+        Document doc = verifyDocumentOwnership(id);
+        if (doc.getFilePath() != null) {
             try {
                 fileStorageService.delete(doc.getFilePath());
             } catch (Exception e) {

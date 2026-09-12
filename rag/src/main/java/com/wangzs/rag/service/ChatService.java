@@ -40,31 +40,19 @@ public class ChatService {
     private final ChatMessageMapper chatMessageMapper;
     private final ConfigService configService;
 
-    /** 惰性加载 */
-    private volatile String systemPrompt;
-    private volatile int topK;
-    private volatile boolean configLoaded = false;
+    private String getSystemPrompt() {
+        return configService.getString("rag.chat.system-prompt",
+                "你是一个智能助手，请基于提供的参考文档回答用户问题。如果参考文档中没有相关信息，请诚实告知用户。");
+    }
 
-    private void ensureConfigLoaded() {
-        if (!configLoaded) {
-            synchronized (this) {
-                if (!configLoaded) {
-                    systemPrompt = configService.getString("rag.chat.system-prompt",
-                            "你是一个智能助手，请基于提供的参考文档回答用户问题。如果参考文档中没有相关信息，请诚实告知用户。");
-                    topK = configService.getInt("rag.retrieval.top-k", 5);
-                    configLoaded = true;
-                    log.info("聊天配置已加载: topK={}", topK);
-                }
-            }
-        }
+    private int getTopK() {
+        return configService.getInt("rag.retrieval.top-k", 5);
     }
 
     /**
      * RAG 对话（非流式）
      */
     public ChatResponse chat(ChatRequest request) {
-        ensureConfigLoaded();
-
         // 1. 确保会话存在（绑定知识库 ID）
         Long kbId = request.getKbIds() != null && !request.getKbIds().isEmpty()
                 ? request.getKbIds().get(0) : null;
@@ -72,7 +60,7 @@ public class ChatService {
 
         // 2. 检索相关文档
         List<RetrievalService.SearchResult> searchResults = retrievalService.search(
-                request.getQuestion(), topK, request.getKbIds());
+                request.getQuestion(), getTopK(), request.getKbIds());
 
         // TODO【RAG 调试用】向量库空结果保护
         // 检索结果为空时，暂时不让大模型自动搜索回复
@@ -120,14 +108,12 @@ public class ChatService {
      * RAG 对话（流式 SSE）
      */
     public Flux<String> chatStream(ChatRequest request) {
-        ensureConfigLoaded();
-
         Long kbId = request.getKbIds() != null && !request.getKbIds().isEmpty()
                 ? request.getKbIds().get(0) : null;
         String sessionId = ensureSession(request.getSessionId(), kbId);
 
         List<RetrievalService.SearchResult> searchResults = retrievalService.search(
-                request.getQuestion(), topK, request.getKbIds());
+                request.getQuestion(), getTopK(), request.getKbIds());
 
         // TODO【RAG 调试用】向量库空结果保护
         if (searchResults.isEmpty()) {
@@ -213,7 +199,7 @@ public class ChatService {
         List<Message> messages = new ArrayList<>();
 
         // 系统提示词（role=3）
-        String ragPrompt = systemPrompt + "\n\n参考文档：\n" + context;
+        String ragPrompt = getSystemPrompt() + "\n\n参考文档：\n" + context;
         messages.add(new SystemMessage(ragPrompt));
 
         // 从 Redis 获取历史上下文

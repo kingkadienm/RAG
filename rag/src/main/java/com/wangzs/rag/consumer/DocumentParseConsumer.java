@@ -50,23 +50,10 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
     private static final String USER_DIR_PLACEHOLDER = "${user.dir}";
     private static final String USER_DIR_VALUE = System.getProperty("user.dir");
 
-    /** 惰性加载 */
-    private volatile String localUploadPath;
-    private volatile boolean pathLoaded = false;
 
     private String getLocalUploadPath() {
-        if (!pathLoaded) {
-            synchronized (this) {
-                if (!pathLoaded) {
-                    String rawPath = configService.getString("file.storage.local.upload-path",
-                            "${user.dir}/rag-uploads/");
-                    localUploadPath = resolveUserDir(rawPath);
-                    pathLoaded = true;
-                    log.info("本地存储路径已加载: localUploadPath={}", localUploadPath);
-                }
-            }
-        }
-        return localUploadPath;
+        String rawPath = configService.getString("file.storage.local.upload-path", "${user.dir}/rag-uploads/");
+        return resolveUserDir(rawPath);
     }
 
     private String resolveUserDir(String value) {

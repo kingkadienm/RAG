@@ -26,21 +26,6 @@ public class RetrievalService {
     private final VectorStore vectorStore;
     private final ConfigService configService;
 
-    /** 惰性加载 */
-    private volatile double similarityThreshold = 0.7;
-    private volatile boolean configLoaded = false;
-
-    private void ensureConfigLoaded() {
-        if (!configLoaded) {
-            synchronized (this) {
-                if (!configLoaded) {
-                    similarityThreshold = configService.getDouble("rag.retrieval.similarity-threshold", 0.7);
-                    configLoaded = true;
-                }
-            }
-        }
-    }
-
     /**
      * 检索与查询相关的 Top-K 文档片段
      *
@@ -49,8 +34,8 @@ public class RetrievalService {
      * @param kbIds     限定知识库 ID 列表（可选）
      * @return 检索到的文档片段
      */
-    public List<RetrievalService.SearchResult> search(String queryText, int topK, List<Long> kbIds) {
-        ensureConfigLoaded();
+    public List<SearchResult> search(String queryText, int topK, List<Long> kbIds) {
+        double similarityThreshold = configService.getDouble("rag.retrieval.similarity-threshold", 0.7);
 
         if (queryText == null || queryText.isBlank()) {
             return List.of();

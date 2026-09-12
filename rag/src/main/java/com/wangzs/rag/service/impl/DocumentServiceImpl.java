@@ -211,6 +211,15 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
     }
 
     @Override
+    public void updateFilePath(Long id, String filePath) {
+        Document updateDoc = new Document();
+        updateDoc.setId(id);
+        updateDoc.setFilePath(filePath);
+        baseMapper.updateById(updateDoc);
+        log.info("更新文档存储路径: id={}, filePath={}", id, filePath);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         Document doc = getById(id);

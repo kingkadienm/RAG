@@ -20,26 +20,12 @@ public class FileStorageFactory {
     private final FileStorageCloudServiceImpl cloudStorageService;
     private final ConfigService configService;
 
-    /** 惰性加载 */
-    private volatile String storageType = "local";
-    private volatile boolean configLoaded = false;
-
-    private void ensureConfigLoaded() {
-        if (!configLoaded) {
-            synchronized (this) {
-                if (!configLoaded) {
-                    storageType = configService.getString("file.storage.type", "local");
-                    configLoaded = true;
-                }
-            }
-        }
-    }
 
     /**
      * 根据配置获取存储服务
      */
     public IFileStorageService getStorageService() {
-        ensureConfigLoaded();
+        String storageType = configService.getString("file.storage.type", "local");
         if (storageType == null || storageType.isBlank() || "local".equals(storageType)) {
             return localStorageService;
         }

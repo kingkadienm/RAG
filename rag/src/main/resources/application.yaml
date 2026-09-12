@@ -7,9 +7,9 @@ spring:
 
   # ==================== MySQL 数据源 ====================
   datasource:
-   jdbc-url: jdbc:mysql://127.0.0.1:3306/rag_v1?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+   jdbc-url: jdbc:mysql://127.0.0.1:3306/rag_v1?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
    username: root
-   password: Y5TRj54n6ArXbMEB
+   password: ${MYSQL_PASSWORD:}
    driver-class-name: com.mysql.cj.jdbc.Driver
    type: com.zaxxer.hikari.HikariDataSource
    hikari:
@@ -23,7 +23,7 @@ spring:
     redis:
       host: 127.0.0.1
       port: 6379
-      password: RCtCZmzcCepnxbCW
+      password: ${REDIS_PASSWORD:}
       database: 0
       lettuce:
         pool:
@@ -55,7 +55,7 @@ app:
     pgvector:
       jdbc-url: jdbc:postgresql://127.0.0.1:5432/vector_db
       username: postgres
-      password: postgres123456
+      password: ${PG_PASSWORD:}
       driver-class-name: org.postgresql.Driver
 
 # ==================== RocketMQ ====================
@@ -77,10 +77,10 @@ sa-token:
   is-write-header: true
   is-store-http-only: true
   token-style: uuid
-  jwt-secret-key: rag-secret-key-change-in-production
+  jwt-secret-key: ${JWT_SECRET_KEY:}
   is-read-body: false
   # 拦截路由配置（白名单）
-  exclude-urls: /auth/login, /auth/register, /upload/**, /doc/preview/**, /error
+  exclude-urls: /auth/login, /auth/register, /doc/preview/**, /error
   # 拦截路由配置（鉴权）
   auth-url: /auth/need-auth
 # ==================== 文件存储配置（策略模式切换） ====================
@@ -93,8 +93,8 @@ file:
     cloud:
       endpoint: http://127.0.0.1:9000
       bucket: rag-files
-      access-key: minioadmin
-      secret-key: minioadmin
+      access-key: ${MINIO_ACCESS_KEY:}
+      secret-key: ${MINIO_SECRET_KEY:}
       region: cn-north-1
       public-url-prefix: http://127.0.0.1:9000/rag-files/
       path-style-access: true
@@ -132,4 +132,5 @@ rag:
     max-attempts: 3           # 最大重试次数
     interval-minutes: 5       # 重试间隔（分钟）
   config:
-    refresh-interval-seconds: 60  # 配置缓存自动刷新间隔（秒）
+    refresh-interval-ms: 60000  # 配置缓存自动刷新间隔（毫秒）
+

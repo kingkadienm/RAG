@@ -1,6 +1,7 @@
 package com.wangzs.rag.service.file;
 
 import com.wangzs.rag.service.ConfigService;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -38,34 +39,19 @@ public class FileStorageLocalServiceImpl implements IFileStorageService {
     private final ConfigService configService;
     private final Environment environment;
 
-    /** 惰性加载 */
-    private volatile String uploadPath;
-    private volatile String urlPrefix;
-    private volatile boolean configLoaded = false;
-
     public FileStorageLocalServiceImpl(ConfigService configService, Environment environment) {
         this.configService = configService;
         this.environment = environment;
     }
+    
+    private String getUploadPath() {
+        String raw = configService.getString("file.storage.local.upload-path", "${user.dir}/rag-uploads/");
+        return resolvePlaceholders(raw);
+    }
 
-    private void ensureConfigLoaded() {
-        if (!configLoaded) {
-            synchronized (this) {
-                if (!configLoaded) {
-                    String rawUploadPath = configService.getString("file.storage.local.upload-path",
-                            "${user.dir}/rag-uploads/");
-                    String rawUrlPrefix = configService.getString("file.storage.local.url-prefix",
-                            "http://127.0.0.1:8080/upload/");
-
-                    // 解析占位符：${user.dir} → 实际系统用户目录
-                    uploadPath = resolvePlaceholders(rawUploadPath);
-                    urlPrefix = resolvePlaceholders(rawUrlPrefix);
-
-                    configLoaded = true;
-                    log.info("本地存储配置已加载: uploadPath={}, urlPrefix={}", uploadPath, urlPrefix);
-                }
-            }
-        }
+    private String getUrlPrefix() {
+        String raw = configService.getString("file.storage.local.url-prefix", "http://127.0.0.1:8080/upload/");
+        return resolvePlaceholders(raw);
     }
 
     /**
@@ -88,7 +74,6 @@ public class FileStorageLocalServiceImpl implements IFileStorageService {
 
     @Override
     public FileUploadVO upload(MultipartFile file, String path) {
-        ensureConfigLoaded();
 
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("上传文件为空");
@@ -104,12 +89,12 @@ public class FileStorageLocalServiceImpl implements IFileStorageService {
 
         // 构建完整存储路径
         String relativePath = path + storedFileName;
-        String fullPath = uploadPath + relativePath;
+        String fullPath = getUploadPath() + relativePath;
 
         log.info("文件目录为：fullPath={}  relativePath={}",fullPath,relativePath);
 
         // 确保目录存在
-        File directory = new File(uploadPath + path);
+        File directory = new File(getUploadPath() + path);
         if (!directory.exists()) {
             boolean created = directory.mkdirs();
             if (!created) {
@@ -132,7 +117,7 @@ public class FileStorageLocalServiceImpl implements IFileStorageService {
         FileUploadVO vo = new FileUploadVO();
         vo.setFileName(originalFileName);
         vo.setFileKey(relativePath);
-        vo.setFileUrl(urlPrefix + relativePath);
+        vo.setFileUrl(getUrlPrefix() + relativePath);
         vo.setFileSize(file.getSize());
         vo.setFileType(fileType);
 
@@ -145,7 +130,7 @@ public class FileStorageLocalServiceImpl implements IFileStorageService {
         if (StringUtils.isBlank(fileKey)) {
             return StringUtils.EMPTY;
         }
-        return urlPrefix + fileKey;
+        return getUrlPrefix() + fileKey;
     }
 
     @Override
@@ -154,7 +139,7 @@ public class FileStorageLocalServiceImpl implements IFileStorageService {
             return false;
         }
 
-        String fullPath = uploadPath + fileKey;
+        String fullPath = getUploadPath () + fileKey;
         File file = new File(fullPath);
         try {
             FileUtils.forceDelete(file);
@@ -171,8 +156,7 @@ public class FileStorageLocalServiceImpl implements IFileStorageService {
         if (StringUtils.isBlank(fileKey)) {
             throw new IllegalArgumentException("文件 key 不能为空");
         }
-        ensureConfigLoaded();
-        String fullPath = uploadPath + fileKey;
+        String fullPath = getUploadPath() + fileKey;
         File file = new File(fullPath);
         if (!file.exists() || !file.isFile()) {
             throw BizException.of(3001, "文件不存在: " + fullPath);
