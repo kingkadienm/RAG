@@ -1,0 +1,1 @@
+import{V as t}from"./index-BaLat5KT.js";const n={list(){return t.get("/knowledge-base/list")},getById(e){return t.get(`/knowledge-base/${e}`)},create(e){return t.post("/knowledge-base",e)},update(e,r){return t.put(`/knowledge-base/${e}`,r)},delete(e){return t.delete(`/knowledge-base/${e}`)}};export{n as k};

@@ -2,23 +2,32 @@
   <div class="chat-page">
     <div class="chat-container">
       <!-- 左侧会话列表 -->
-      <div class="chat-sidebar">
+      <div class="chat-sidebar" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
         <div class="chat-sidebar-header">
-          <el-select
-              v-model="selectedKbId"
-              placeholder="选择知识库"
-              size="small"
-              style="width: 100%"
-              filterable
-              @change="onKbChange"
-          >
-            <el-option
-                v-for="kb in kbList"
-                :key="kb.id"
-                :label="kb.name"
-                :value="kb.id"
+          <div class="sidebar-header-top">
+            <el-button
+              class="sidebar-toggle"
+              :icon="sidebarCollapsed ? Expand : Fold"
+              @click="toggleSidebar"
+              :title="sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'"
+              aria-label="切换侧边栏"
             />
-          </el-select>
+            <el-select
+                v-model="selectedKbId"
+                placeholder="选择知识库"
+                size="small"
+                style="flex: 1"
+                filterable
+                @change="onKbChange"
+            >
+              <el-option
+                  v-for="kb in kbList"
+                  :key="kb.id"
+                  :label="kb.name"
+                  :value="kb.id"
+              />
+            </el-select>
+          </div>
           <el-button
               type="primary"
               size="small"
@@ -43,9 +52,15 @@
         </div>
       </div>
 
+      <!-- 侧边栏折叠提示 -->
+      <div v-if="sidebarCollapsed" class="sidebar-collapsed-hint" @click="toggleSidebar">
+        <el-icon><DArrowRight /></el-icon>
+        <span>展开侧边栏</span>
+      </div>
+
       <!-- 右侧聊天区域 -->
       <div class="chat-main">
-        <div class="chat-messages" ref="messagesContainer">
+        <div class="chat-messages" ref="messagesContainer" @scroll="handleMessageScroll">
           <div v-if="messages.length === 0" class="empty-chat">
             <el-icon :size="64" color="#dcdfe6">
               <ChatDotRound/>
@@ -157,15 +172,30 @@
 </template>
 
 <script setup lang="ts">
-import {ref, onMounted, nextTick, onBeforeUnmount} from 'vue'
+import {ref, onMounted, nextTick, onBeforeUnmount, watch} from 'vue'
 import {ElMessage} from 'element-plus'
-import {UserFilled, BellFilled, Plus, ChatDotRound, Loading, Promotion, ArrowUp} from '@element-plus/icons-vue'
+import {UserFilled, BellFilled, Plus, ChatDotRound, Loading, Promotion, ArrowUp, Expand, Fold, DArrowRight} from '@element-plus/icons-vue'
 import {chatApi} from '@/api/chat'
 import {kbApi} from '@/api/knowledgeBase'
 import type {ChatSessionVO, ChatMessageVO, ChatRequest, KnowledgeBase} from '@/types'
 import {marked} from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
+
+const kbList = ref<KnowledgeBase[]>([])
+const selectedKbId = ref<number | null>(null)
+const sessions = ref<ChatSessionVO[]>([])
+const currentSessionId = ref('')
+const messages = ref<ChatMessageVO[]>([])
+const inputMessage = ref('')
+const sending = ref(false)
+const loading = ref(false)
+const streamingContent = ref<string | null>(null)
+const messagesContainer = ref<HTMLElement>()
+const showBackToTop = ref(false)
+const sidebarCollapsed = ref(false)
+const userScrolling = ref(false) // P2-3: 用户正在滚动标志
+const shouldAutoScroll = ref(true) // P2-3: 是否应该自动滚动
 
 // 配置 marked
 marked.setOptions({
@@ -184,6 +214,69 @@ marked.setOptions({
 })
 
 /**
+ * P2-1: 切换侧边栏折叠状态
+ */
+const toggleSidebar = () => {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  // 保存状态到 localStorage
+  localStorage.setItem('chat-sidebar-collapsed', String(sidebarCollapsed.value))
+}
+
+/**
+ * P2-3: 处理消息滚动事件
+ */
+const handleMessageScroll = () => {
+  if (!messagesContainer.value) return
+
+  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+  const isAtBottom = scrollHeight - scrollTop - clientHeight < 50 // 距离底部 50px 以内
+
+  // 如果用户在向上滚动（查看历史消息），停止自动滚动
+  if (!isAtBottom) {
+    userScrolling.value = true
+    shouldAutoScroll.value = false
+  } else {
+    // 如果用户滚动到底部，恢复自动滚动
+    userScrolling.value = false
+    shouldAutoScroll.value = true
+  }
+
+  // 控制返回顶部按钮显示
+  showBackToTop.value = scrollTop > 300
+}
+
+/**
+ * P2-3: 智能滚动到底部
+ * - 如果用户正在查看历史消息，不强制滚动
+ * - 只在应该自动滚动时滚动
+ */
+const smartScrollToBottom = () => {
+  if (!shouldAutoScroll.value || !messagesContainer.value) return
+
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  })
+}
+
+/**
+ * P2-3: 滚动到底部（强制）
+ */
+const forceScrollToBottom = () => {
+  shouldAutoScroll.value = true
+  userScrolling.value = false
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTo({
+        top: messagesContainer.value.scrollHeight,
+        behavior: 'smooth'
+      })
+    }
+  })
+}
+
+/**
  * 渲染 Markdown 内容
  */
 const renderMarkdown = (content: string) => {
@@ -197,18 +290,6 @@ const renderMarkdown = (content: string) => {
   }
 }
 
-const kbList = ref<KnowledgeBase[]>([])
-const selectedKbId = ref<number | null>(null)
-const sessions = ref<ChatSessionVO[]>([])
-const currentSessionId = ref('')
-const messages = ref<ChatMessageVO[]>([])
-const inputMessage = ref('')
-const sending = ref(false)
-const loading = ref(false)
-const streamingContent = ref<string | null>(null)
-const messagesContainer = ref<HTMLElement>()
-const showBackToTop = ref(false)
-
 onMounted(async () => {
   await fetchKbList()
   // 从 URL 参数获取知识库 ID
@@ -219,12 +300,18 @@ onMounted(async () => {
   fetchSessions()
 
   // 监听滚动事件
-  messagesContainer.value?.addEventListener('scroll', handleScroll)
+  messagesContainer.value?.addEventListener('scroll', handleMessageScroll)
+
+  // P2-1: 恢复侧边栏状态
+  const savedSidebarState = localStorage.getItem('chat-sidebar-collapsed')
+  if (savedSidebarState !== null) {
+    sidebarCollapsed.value = savedSidebarState === 'true'
+  }
 })
 
 onBeforeUnmount(() => {
   // 清理滚动事件监听
-  messagesContainer.value?.removeEventListener('scroll', handleScroll)
+  messagesContainer.value?.removeEventListener('scroll', handleMessageScroll)
 })
 
 const fetchKbList = async () => {
@@ -290,7 +377,8 @@ const switchSession = async (session: ChatSessionVO) => {
   currentSessionId.value = session.sessionId
   const res = await chatApi.getMessages(session.sessionId)
   messages.value = res.data
-  scrollToBottom()
+  shouldAutoScroll.value = true // 切换会话时恢复自动滚动
+  forceScrollToBottom()
 }
 
 const handleSend = async () => {
@@ -308,7 +396,8 @@ const handleSend = async () => {
     createdTime: new Date().toISOString(),
   }
   messages.value.push(userMsg)
-  scrollToBottom()
+  shouldAutoScroll.value = true // 发送消息时恢复自动滚动
+  smartScrollToBottom()
 
   sending.value = true
   streamingContent.value = ''
@@ -324,7 +413,7 @@ const handleSend = async () => {
     // 流式接收回复，实时更新 UI
     await chatApi.chatStream(data, (chunk) => {
       streamingContent.value += chunk
-      scrollToBottom()
+      smartScrollToBottom() // P2-3: 使用智能滚动
     })
 
     // 流结束后，更新为最终消息
@@ -344,39 +433,12 @@ const handleSend = async () => {
     sending.value = false
     loading.value = false
     streamingContent.value = null
-    scrollToBottom()
+    smartScrollToBottom()
   }
 }
 
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
-  })
-}
-
-/**
- * 处理滚动事件，控制返回顶部按钮显示
- */
-const handleScroll = () => {
-  if (messagesContainer.value) {
-    const scrollTop = messagesContainer.value.scrollTop
-    showBackToTop.value = scrollTop > 300
-  }
-}
-
-/**
- * 返回顶部
- */
-const scrollToTop = () => {
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    })
-  }
-}
+// P2-3: 使用智能滚动替代强制滚动
+const scrollToBottom = smartScrollToBottom
 
 const formatDate = (d: string) => {
   if (!d) return ''
@@ -538,6 +600,54 @@ onMounted(() => {
 
 .kb-selector {
   margin-bottom: 12px;
+}
+
+/* P2-1: 侧边栏折叠样式 */
+.sidebar-header-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-toggle {
+  flex-shrink: 0;
+}
+
+.sidebar-collapsed {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-right: none;
+  transition: all 0.3s ease;
+}
+
+.sidebar-collapsed-hint {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--color-primary);
+  color: #fff;
+  padding: 12px 8px;
+  border-radius: 0 8px 8px 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  box-shadow: var(--shadow-md);
+  transition: all 0.2s ease;
+  z-index: 10;
+
+  &:hover {
+    background: var(--color-primary-hover);
+    padding-left: 12px;
+  }
+
+  .el-icon {
+    font-size: 18px;
+  }
 }
 
 /* 屏幕阅读器专用：隐藏内容但保持可访问 */
