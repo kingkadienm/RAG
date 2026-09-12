@@ -105,6 +105,7 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
         record.setStorageType(storageType);
         record.setCheckStatus(1); // 通过
         record.setUploaderId(creatorId);
+        record.setDeleted(0); // 未删除
         uploadRecordMapper.insert(record);
         log.info("创建上传记录成功: uploadRecordId={}, docId={}", record.getId(), doc.getId());
 

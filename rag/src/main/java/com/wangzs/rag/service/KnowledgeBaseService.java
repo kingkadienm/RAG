@@ -170,10 +170,12 @@ public class KnowledgeBaseService {
             documentMapper.updateById(doc);
         }
 
-        // 4. 删除该知识库的上传记录
-        uploadRecordMapper.delete(
-                new LambdaQueryWrapper<com.wangzs.rag.model.entity.UploadRecord>()
+        // 4. 逻辑删除该知识库的上传记录
+        uploadRecordMapper.update(
+                null,
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<com.wangzs.rag.model.entity.UploadRecord>()
                         .eq(com.wangzs.rag.model.entity.UploadRecord::getKbId, id)
+                        .set(com.wangzs.rag.model.entity.UploadRecord::getDeleted, 1)
         );
 
         // 5. 标记知识库为已删除

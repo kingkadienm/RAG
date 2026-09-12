@@ -119,6 +119,7 @@ public class FileCheckService {
         record.setKbId(kbId);
         record.setUploaderId(uploaderId);
         record.setCreatedTime(LocalDateTime.now());
+        record.setDeleted(0); // 未删除
         return record;
     }
 }
