@@ -7,6 +7,7 @@ import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
 import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.model.dto.KnowledgeBaseCreateDTO;
+import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.model.entity.KnowledgeBase;
 import com.wangzs.rag.service.*;
 import io.swagger.v3.oas.annotations.Operation;
@@ -91,14 +92,14 @@ public class KnowledgeBaseController {
 
     @Operation(summary = "查询知识库下的文档列表")
     @GetMapping("/documents/{kbId}")
-    public ApiResult<Page<?>> listDocuments(@PathVariable Long kbId,
+    public ApiResult<Page<Document>> listDocuments(@PathVariable Long kbId,
                                             @RequestParam(name = "pageNum", defaultValue = "1") int pageNum,
                                             @RequestParam(name = "pageSize", defaultValue = "10") int pageSize) {
         KnowledgeBase kb = knowledgeBaseService.getById(kbId);
         if (!AuthUtil.getLoginUserId().equals(kb.getCreatorId())) {
             throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
         }
-        Page<?> page = documentService.pageByKbId(kbId, pageNum, pageSize);
+        Page<Document> page = documentService.pageByKbId(kbId, pageNum, pageSize);
         return ApiResult.success(page);
     }
 }
