@@ -68,7 +68,18 @@
             </div>
           </div>
 
-          <div v-if="loading" class="message-row assistant">
+          <!-- 流式输出中的助手消息 -->
+          <div v-if="streamingContent !== null" class="message-row assistant">
+            <div class="message-avatar">
+              <el-avatar :size="36" :icon="BellFilled" type="success"/>
+            </div>
+            <div class="message-body">
+              <div class="message-role">AI 助手</div>
+              <div class="message-content">{{ streamingContent }}</div>
+            </div>
+          </div>
+
+          <div v-if="loading && streamingContent === null" class="message-row assistant">
             <div class="message-avatar">
               <el-avatar :size="36" :icon="BellFilled" type="success"/>
             </div>
@@ -122,15 +133,12 @@
 </template>
 
 <script setup lang="ts">
-import {ref, reactive, onMounted, nextTick} from 'vue'
+import {ref, onMounted, nextTick} from 'vue'
 import {ElMessage} from 'element-plus'
 import {UserFilled, BellFilled, Plus, ChatDotRound, Loading, Promotion} from '@element-plus/icons-vue'
 import {chatApi} from '@/api/chat'
 import {kbApi} from '@/api/knowledgeBase'
-import {useAuthStore} from '@/stores/auth'
-import type {ChatSessionVO, ChatMessageVO, ChatRequest, ChatResponse, KnowledgeBase} from '@/types'
-
-const authStore = useAuthStore()
+import type {ChatSessionVO, ChatMessageVO, ChatRequest, KnowledgeBase} from '@/types'
 
 const kbList = ref<KnowledgeBase[]>([])
 const selectedKbId = ref<number | null>(null)
@@ -140,6 +148,7 @@ const messages = ref<ChatMessageVO[]>([])
 const inputMessage = ref('')
 const sending = ref(false)
 const loading = ref(false)
+const streamingContent = ref<string | null>(null)
 const messagesContainer = ref<HTMLElement>()
 
 onMounted(async () => {
@@ -211,6 +220,9 @@ const handleSend = async () => {
   scrollToBottom()
 
   sending.value = true
+  streamingContent.value = ''
+  loading.value = true
+
   try {
     const data: ChatRequest = {
       question: userMessage,
@@ -218,23 +230,30 @@ const handleSend = async () => {
       kbIds: [selectedKbId.value],
     }
 
-    const res: ChatResponse = await chatApi.chat(data)
-    currentSessionId.value = res.sessionId
+    // 流式接收回复，实时更新 UI
+    await chatApi.chatStream(data, (chunk) => {
+      streamingContent.value += chunk
+      scrollToBottom()
+    })
 
+    // 流结束后，更新为最终消息
     const assistantMsg: ChatMessageVO = {
       id: Date.now() + 1,
-      sessionId: res.sessionId,
+      sessionId: currentSessionId.value,
       role: 2,
-      content: res.answer,
-      refChunks: res.references?.map(c => `[文档${c.docId} ${c.fileName} 相似度:${c.score.toFixed(2)}]`).join(', ') || '',
+      content: streamingContent.value || '',
+      refChunks: '', // 流式模式下暂无参考文档（后端 SSE 简化处理）
       createdTime: new Date().toISOString(),
     }
     messages.value.push(assistantMsg)
-    scrollToBottom()
-  } catch (e) {
-    // handled by interceptor
+    streamingContent.value = null
+  } catch (e: any) {
+    ElMessage.error(e.message || '发送失败')
   } finally {
     sending.value = false
+    loading.value = false
+    streamingContent.value = null
+    scrollToBottom()
   }
 }
 
