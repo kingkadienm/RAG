@@ -32,8 +32,8 @@ public class ConfigService {
 
     private final ConfigMapper configMapper;
 
-    /** 本地缓存：key → Config */
-    private final Map<String, Config> cache = new ConcurrentHashMap<>();
+    /** 本地缓存：key → Config（volatile 保证可见性，引用替换实现原子更新） */
+    private volatile Map<String, Config> cache = new ConcurrentHashMap<>();
 
     /** 缓存刷新间隔（毫秒），默认 60s */
     @Value("${rag.config.refresh-interval-ms:60000}")
@@ -64,7 +64,7 @@ public class ConfigService {
     }
 
     /**
-     * 从数据库全量刷新缓存
+     * 从数据库全量刷新缓存（原子引用替换，无间隙窗口）
      */
     public synchronized void refreshCache() {
         List<Config> all = configMapper.selectList(
@@ -74,8 +74,7 @@ public class ConfigService {
         for (Config c : all) {
             newCache.put(c.getConfigKey(), c);
         }
-        cache.clear();
-        cache.putAll(newCache);
+        cache = newCache; // 原子替换，读线程始终看到完整快照
         log.info("配置缓存已刷新，共 {} 条记录", cache.size());
     }
 
@@ -168,7 +167,7 @@ public class ConfigService {
         }
         config.setConfigValue(value);
         configMapper.updateById(config);
-        cache.put(key, config);
+        cache.put(key, config); // 写当前缓存引用
         log.info("配置已更新: {} = {}", key, value);
         return config;
     }
@@ -178,7 +177,7 @@ public class ConfigService {
      */
     public Config create(Config config) {
         configMapper.insert(config);
-        cache.put(config.getConfigKey(), config);
+        cache.put(config.getConfigKey(), config); // 写当前缓存引用
         log.info("配置已新增: {} = {}", config.getConfigKey(), config.getConfigValue());
         return config;
     }
@@ -196,7 +195,7 @@ public class ConfigService {
         }
         config.setDeleted(1);
         configMapper.updateById(config);
-        cache.remove(config.getConfigKey());
+        cache.remove(config.getConfigKey()); // 写当前缓存引用
         log.info("配置已删除: id={}, key={}", id, config.getConfigKey());
     }
 
