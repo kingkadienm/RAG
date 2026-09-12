@@ -1,10 +1,10 @@
 package com.wangzs.rag.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
-import cn.dev33.satoken.stp.StpUtil;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
+import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.model.entity.ChatMessage;
 import com.wangzs.rag.model.entity.ChatSession;
 import com.wangzs.rag.service.ChatSessionService;
@@ -31,19 +31,13 @@ public class ChatSessionController {
     private final ChatSessionService chatSessionService;
     private final ChatMessageService chatMessageService;
 
-    /** 获取当前登录用户 ID */
-    private Long getLoginUserId() {
-        Object loginId = StpUtil.getLoginId();
-        return loginId instanceof Long ? (Long) loginId : Long.parseLong(loginId.toString());
-    }
-
     /** 校验会话归属：返回会话实体，非归属用户抛出 NOT_FOUND */
     private ChatSession verifySessionOwnership(String sessionId) {
         ChatSession session = chatSessionService.getSession(sessionId);
         if (session == null) {
             throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
         }
-        if (!getLoginUserId().equals(session.getUserId())) {
+        if (!AuthUtil.getLoginUserId().equals(session.getUserId())) {
             throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
         }
         return session;
@@ -57,7 +51,7 @@ public class ChatSessionController {
     @Operation(summary = "查询会话列表")
     @GetMapping
     public ApiResult<List<ChatSession>> list(@RequestParam(name = "kbId", required = false) Long kbId) {
-        Long userId = getLoginUserId();
+        Long userId = AuthUtil.getLoginUserId();
         List<ChatSession> sessions = chatSessionService.listSessions(userId, kbId);
         return ApiResult.success(sessions);
     }
@@ -80,7 +74,7 @@ public class ChatSessionController {
     @DeleteMapping("/{sessionId}")
     public ApiResult<Void> delete(@PathVariable String sessionId) {
         verifySessionOwnership(sessionId);
-        chatSessionService.deleteSession(getLoginUserId(), sessionId);
+        chatSessionService.deleteSession(AuthUtil.getLoginUserId(), sessionId);
         return ApiResult.success(null, "删除成功");
     }
 }

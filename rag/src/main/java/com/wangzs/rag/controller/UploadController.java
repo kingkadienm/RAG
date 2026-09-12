@@ -1,9 +1,10 @@
 package com.wangzs.rag.controller;
 
-import cn.dev33.satoken.stp.StpUtil;
+import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
+import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.model.dto.UploadFileRequest;
 import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.service.*;
@@ -43,7 +44,7 @@ public class UploadController {
             throw BizException.of(ErrorCode.FILE_EMPTY);
         }
 
-        Long userId = getLoginUserId();
+        Long userId = AuthUtil.getLoginUserId();
         String originalFilename = file.getOriginalFilename();
         String storageType = configService.getString("file.storage.type", "local");
 
@@ -106,14 +107,6 @@ public class UploadController {
         data.put("parseStatus", 0);
         data.put("message", "文件上传成功，正在后台解析");
         return ApiResult.success(data, "文件上传成功");
-    }
-
-    private Long getLoginUserId() {
-        if (!StpUtil.isLogin()) {
-            throw BizException.of(ErrorCode.PARAM_ERROR);
-        }
-        Object loginId = StpUtil.getLoginId();
-        return loginId instanceof Long ? (Long) loginId : Long.parseLong(loginId.toString());
     }
 
     private String extractFileKey(Object uploadResult) {

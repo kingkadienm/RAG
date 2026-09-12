@@ -1,10 +1,11 @@
 package com.wangzs.rag.controller;
 
-import cn.dev33.satoken.stp.StpUtil;
+import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
+import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.model.dto.ChatRequest;
 import com.wangzs.rag.model.dto.ChatResponse;
 import com.wangzs.rag.model.dto.KnowledgeBaseCreateDTO;
@@ -36,7 +37,7 @@ public class KnowledgeBaseController {
     @Operation(summary = "创建知识库")
     @PostMapping
     public ApiResult<KnowledgeBase> create(@RequestBody KnowledgeBaseCreateDTO dto) {
-        Long userId = getLoginUserId();
+        Long userId = AuthUtil.getLoginUserId();
         KnowledgeBase kb = knowledgeBaseService.create(dto.getName(), dto.getDescription(), userId);
         return ApiResult.success(kb, "创建成功");
     }
@@ -45,7 +46,7 @@ public class KnowledgeBaseController {
     @GetMapping("/{id}")
     public ApiResult<KnowledgeBase> getById(@PathVariable Long id) {
         KnowledgeBase kb = knowledgeBaseService.getById(id);
-        if (!getLoginUserId().equals(kb.getCreatorId())) {
+        if (!AuthUtil.getLoginUserId().equals(kb.getCreatorId())) {
             throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
         }
         return ApiResult.success(kb);
@@ -56,7 +57,7 @@ public class KnowledgeBaseController {
     public ApiResult<Page<KnowledgeBase>> page(
             @RequestParam(name = "pageNum", defaultValue = "1") int pageNum,
             @RequestParam(name = "pageSize", defaultValue = "10") int pageSize) {
-        Long userId = getLoginUserId();
+        Long userId = AuthUtil.getLoginUserId();
         Page<KnowledgeBase> page = knowledgeBaseService.page(userId, pageNum, pageSize);
         return ApiResult.success(page);
     }
@@ -64,7 +65,7 @@ public class KnowledgeBaseController {
     @Operation(summary = "查询用户的所有知识库")
     @GetMapping("/list")
     public ApiResult<List<KnowledgeBase>> list() {
-        Long userId = getLoginUserId();
+        Long userId = AuthUtil.getLoginUserId();
         List<KnowledgeBase> list = knowledgeBaseService.listByUserId(userId);
         return ApiResult.success(list);
     }
@@ -74,7 +75,7 @@ public class KnowledgeBaseController {
     public ApiResult<KnowledgeBase> update(@PathVariable Long id,
                                            @RequestBody KnowledgeBaseCreateDTO dto) {
         KnowledgeBase kb = knowledgeBaseService.getById(id);
-        if (!getLoginUserId().equals(kb.getCreatorId())) {
+        if (!AuthUtil.getLoginUserId().equals(kb.getCreatorId())) {
             throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
         }
         kb = knowledgeBaseService.update(id, dto.getName(), dto.getDescription());
@@ -85,7 +86,7 @@ public class KnowledgeBaseController {
     @DeleteMapping("/{id}")
     public ApiResult<Void> delete(@PathVariable Long id) {
         KnowledgeBase kb = knowledgeBaseService.getById(id);
-        if (!getLoginUserId().equals(kb.getCreatorId())) {
+        if (!AuthUtil.getLoginUserId().equals(kb.getCreatorId())) {
             throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
         }
         knowledgeBaseService.delete(id);
@@ -98,18 +99,10 @@ public class KnowledgeBaseController {
                                             @RequestParam(name = "pageNum", defaultValue = "1") int pageNum,
                                             @RequestParam(name = "pageSize", defaultValue = "10") int pageSize) {
         KnowledgeBase kb = knowledgeBaseService.getById(kbId);
-        if (!getLoginUserId().equals(kb.getCreatorId())) {
+        if (!AuthUtil.getLoginUserId().equals(kb.getCreatorId())) {
             throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
         }
         Page<?> page = documentService.pageByKbId(kbId, pageNum, pageSize);
         return ApiResult.success(page);
-    }
-
-    private Long getLoginUserId() {
-        if (!StpUtil.isLogin()) {
-            throw BizException.of(ErrorCode.PARAM_ERROR);
-        }
-        Object loginId = StpUtil.getLoginId();
-        return loginId instanceof Long ? (Long) loginId : Long.parseLong(loginId.toString());
     }
 }

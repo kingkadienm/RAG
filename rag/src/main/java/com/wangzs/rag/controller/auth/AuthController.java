@@ -4,6 +4,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
+import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.model.dto.LoginRequest;
 import com.wangzs.rag.model.dto.RegisterRequest;
 import com.wangzs.rag.model.entity.User;
@@ -51,7 +52,7 @@ public class AuthController {
     @Operation(summary = "获取当前用户信息")
     @GetMapping("/me")
     public ApiResult<Map<String, Object>> me() {
-        Long userId = getUserId();
+        Long userId = AuthUtil.getLoginUserId();
         User user = authService.getCurrentUser(userId);
         Map<String, Object> data = Map.of(
                 "userId", user.getId(),
@@ -60,13 +61,5 @@ public class AuthController {
                 "role", user.getRole()
         );
         return ApiResult.success(data);
-    }
-
-    private Long getUserId() {
-        if (!StpUtil.isLogin()) {
-            throw BizException.of(ErrorCode.USER_NOT_LOGIN);
-        }
-        Object loginId = StpUtil.getLoginId();
-        return loginId instanceof Long ? (Long) loginId : Long.parseLong(loginId.toString());
     }
 }

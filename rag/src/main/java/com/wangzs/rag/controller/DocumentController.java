@@ -1,10 +1,10 @@
 package com.wangzs.rag.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
-import cn.dev33.satoken.stp.StpUtil;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
+import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.enums.ParseStatusEnum;
 import com.wangzs.rag.enums.VectorStatusEnum;
 import com.wangzs.rag.model.dto.ChunkVO;
@@ -53,16 +53,10 @@ public class DocumentController {
     private final RocketMQTemplate rocketMQTemplate;
     private final ObjectMapper objectMapper;
 
-    /** 获取当前登录用户 ID */
-    private Long getLoginUserId() {
-        Object loginId = StpUtil.getLoginId();
-        return loginId instanceof Long ? (Long) loginId : Long.parseLong(loginId.toString());
-    }
-
     /** 校验文档归属：返回文档实体，非归属用户抛出 NOT_FOUND */
     private Document verifyDocumentOwnership(Long docId) {
         Document doc = documentService.getById(docId);
-        if (!getLoginUserId().equals(doc.getCreatorId())) {
+        if (!AuthUtil.getLoginUserId().equals(doc.getCreatorId())) {
             throw BizException.of(ErrorCode.DOCUMENT_NOT_FOUND);
         }
         return doc;
