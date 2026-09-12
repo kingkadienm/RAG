@@ -36,18 +36,30 @@
 
         <el-table-column label="解析状态" width="130">
           <template #default="{ row }">
-            <el-tag :type="parseType(row.parseStatus)" size="small">
-              <span :class="['status-dot', parseDot(row.parseStatus)]" />
-              {{ parseLabel(row.parseStatus) }}
+            <el-tag :type="parseType(row.parseStatus)" size="small" :aria-label="`文档解析状态：${parseLabel(row.parseStatus)}`">
+              <span class="status-dot" :class="parseDot(row.parseStatus)" aria-hidden="true" />
+              <el-icon v-if="row.parseStatus === 2" class="status-icon" aria-hidden="true">
+                <CircleCheck />
+              </el-icon>
+              <el-icon v-else-if="row.parseStatus === 3" class="status-icon" aria-hidden="true">
+                <CircleClose />
+              </el-icon>
+              <span class="status-text">{{ parseLabel(row.parseStatus) }}</span>
             </el-tag>
           </template>
         </el-table-column>
 
         <el-table-column label="向量化" width="130">
           <template #default="{ row }">
-            <el-tag :type="vectorType(row.vectorStatus)" size="small">
-              <span :class="['status-dot', vectorDot(row.vectorStatus)]" />
-              {{ vectorLabel(row.vectorStatus) }}
+            <el-tag :type="vectorType(row.vectorStatus)" size="small" :aria-label="`向量化状态：${vectorLabel(row.vectorStatus)}`">
+              <span class="status-dot" :class="vectorDot(row.vectorStatus)" aria-hidden="true" />
+              <el-icon v-if="row.vectorStatus === 2" class="status-icon" aria-hidden="true">
+                <CircleCheck />
+              </el-icon>
+              <el-icon v-else-if="row.vectorStatus === 3" class="status-icon" aria-hidden="true">
+                <CircleClose />
+              </el-icon>
+              <span class="status-text">{{ vectorLabel(row.vectorStatus) }}</span>
             </el-tag>
           </template>
         </el-table-column>
@@ -116,7 +128,7 @@
 import {ref, reactive, onMounted, onUnmounted} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Upload, Refresh } from '@element-plus/icons-vue'
+import { Document, Upload, Refresh, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { documentApi } from '@/api/document'
 import { useAuthStore } from '@/stores/auth'
 import type { Document as DocType } from '@/types'
@@ -312,5 +324,17 @@ onUnmounted(() => {
   height: 8px;
   border-radius: 50%;
   margin-right: 6px;
+}
+
+/* 状态图标样式 */
+.status-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.status-text {
+  vertical-align: middle;
 }
 </style>
