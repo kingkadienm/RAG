@@ -17,7 +17,25 @@
         </div>
       </template>
 
+      <!-- 骨架屏加载状态 -->
+      <div v-if="loading && docList.length === 0" class="skeleton-doc-list">
+        <div v-for="i in 10" :key="i" class="skeleton-doc-item">
+          <div class="skeleton-doc-icon skeleton"></div>
+          <div class="skeleton-doc-info">
+            <div class="skeleton-doc-name skeleton"></div>
+            <div class="skeleton-doc-meta skeleton"></div>
+          </div>
+          <div class="skeleton-doc-actions">
+            <div class="skeleton skeleton" style="width: 60px; height: 24px; margin-right: 8px"></div>
+            <div class="skeleton skeleton" style="width: 60px; height: 24px; margin-right: 8px"></div>
+            <div class="skeleton skeleton" style="width: 60px; height: 24px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 实际表格内容 -->
       <el-table
+        v-else
         :data="docList"
         style="width: 100%"
         v-loading="loading"
@@ -122,6 +140,17 @@
       </div>
     </el-card>
 
+    <!-- 返回顶部按钮 -->
+    <button
+      v-if="showBackToTop"
+      class="back-to-top"
+      @click="scrollToTop"
+      aria-label="返回顶部"
+      title="返回顶部"
+    >
+      <el-icon><ArrowUp /></el-icon>
+    </button>
+
     <!-- 分块预览对话框 -->
     <el-dialog v-model="chunkDialogVisible" title="分块预览" width="800px">
       <div v-if="chunkPreview" class="chunk-preview">{{ chunkPreview }}</div>
@@ -131,10 +160,10 @@
 </template>
 
 <script setup lang="ts">
-import {ref, reactive, onMounted, onUnmounted} from 'vue'
+import {ref, reactive, onMounted, onUnmounted, onBeforeUnmount} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Upload, Refresh, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { Document, Upload, Refresh, CircleCheck, CircleClose, ArrowUp } from '@element-plus/icons-vue'
 import { documentApi } from '@/api/document'
 import { useAuthStore } from '@/stores/auth'
 import type { Document as DocType } from '@/types'
@@ -150,6 +179,7 @@ const docList = ref<DocType[]>([])
 const kbId = ref<number>(Number(route.params.kbId))
 const chunkDialogVisible = ref(false)
 const chunkPreview = ref('')
+const showBackToTop = ref(false)
 
 // SSE 连接映射：docId -> EventSource
 const sseMap = new Map<number, EventSource>()
@@ -316,7 +346,43 @@ const handleRetry = async (row: DocType) => {
   }
 }
 
-onMounted(fetchList)
+/**
+ * 处理滚动事件，控制返回顶部按钮显示
+ */
+const handleScroll = (event: Event) => {
+  const target = event.target as HTMLElement
+  if (target) {
+    const scrollTop = target.scrollTop
+    showBackToTop.value = scrollTop > 300
+  }
+}
+
+/**
+ * 返回顶部
+ */
+const scrollToTop = () => {
+  const layoutMain = document.querySelector('.layout-main')
+  if (layoutMain) {
+    layoutMain.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    })
+  }
+}
+
+onMounted(() => {
+  fetchList()
+
+  // 监听主内容区域滚动
+  const layoutMain = document.querySelector('.layout-main')
+  layoutMain?.addEventListener('scroll', handleScroll)
+})
+
+onBeforeUnmount(() => {
+  // 清理滚动事件监听
+  const layoutMain = document.querySelector('.layout-main')
+  layoutMain?.removeEventListener('scroll', handleScroll)
+})
 
 // 组件卸载时清理 SSE 连接
 onUnmounted(() => {
@@ -361,5 +427,44 @@ onUnmounted(() => {
 
 .status-text {
   vertical-align: middle;
+}
+
+/* 骨架屏样式 */
+.skeleton-doc-list {
+  padding: 16px 0;
+}
+
+.skeleton-doc-item {
+  display: flex;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.skeleton-doc-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  margin-right: 16px;
+}
+
+.skeleton-doc-info {
+  flex: 1;
+}
+
+.skeleton-doc-name {
+  height: 16px;
+  width: 60%;
+  margin-bottom: 8px;
+}
+
+.skeleton-doc-meta {
+  height: 14px;
+  width: 40%;
+}
+
+.skeleton-doc-actions {
+  display: flex;
+  align-items: center;
 }
 </style>

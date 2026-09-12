@@ -1,0 +1,1 @@
+const e={0:{label:"待解析",type:"info"},1:{label:"解析中",type:"warning"},2:{label:"解析成功",type:"success"},3:{label:"解析失败",type:"danger"}},l={0:{label:"待向量化",type:"info"},1:{label:"向量化中",type:"warning"},2:{label:"向量化完成",type:"success"},3:{label:"向量化失败",type:"danger"}};export{e as P,l as V};

@@ -9,9 +9,9 @@ import com.wangzs.rag.model.dto.LoginRequest;
 import com.wangzs.rag.model.dto.RegisterRequest;
 import com.wangzs.rag.model.entity.User;
 import com.wangzs.rag.service.AuthService;
-import com.wangzs.rag.util.PasswordUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +27,7 @@ import java.util.Map;
 public class AuthServiceImpl implements AuthService {
 
     private final UserMapper userMapper;
-    private final PasswordUtil passwordUtil;
+    private final BCryptPasswordEncoder passwordEncoder;
 
     @Override
     public Map<String, Object> login(LoginRequest request) {
@@ -40,7 +40,7 @@ public class AuthServiceImpl implements AuthService {
             throw BizException.of(ErrorCode.USER_DISABLED);
         }
 
-        if (!passwordUtil.matches(request.getPassword(), user.getPassword())) {
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw BizException.of(ErrorCode.USER_PASSWORD_ERROR);
         }
 
@@ -71,7 +71,7 @@ public class AuthServiceImpl implements AuthService {
 
         User user = new User();
         user.setUsername(request.getUsername());
-        user.setPassword(passwordUtil.encode(request.getPassword()));
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setNickname(request.getNickname());
         user.setRole(2); // 普通用户
         user.setStatus(1);

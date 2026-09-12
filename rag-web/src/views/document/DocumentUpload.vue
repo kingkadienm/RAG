@@ -81,7 +81,7 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { documentApi } from '@/api/document'
 import { kbApi } from '@/api/knowledgeBase'
-import type { UploadFile, UploadRawFile } from 'element-plus'
+import type { UploadFile } from 'element-plus'
 import type { KnowledgeBase } from '@/types'
 
 const route = useRoute()
@@ -116,13 +116,11 @@ const handlePaste = async (event: ClipboardEvent) => {
 
   // 将粘贴的文件添加到上传列表
   for (const file of files) {
-    const uploadFile: UploadRawFile = {
+    // 使用 UploadRawFile 类型创建符合 Element Plus 要求的对象
+    const uploadFile: any = {
       name: file.name,
       raw: file,
       size: file.size,
-      status: 'ready',
-      percentage: 0,
-      uid: Date.now() + Math.random(),
     }
     fileList.value.push(uploadFile)
   }

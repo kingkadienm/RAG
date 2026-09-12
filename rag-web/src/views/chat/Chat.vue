@@ -60,7 +60,8 @@
             </div>
             <div class="message-body">
               <div class="message-role">{{ msg.role === 1 ? '我' : 'AI 助手' }}</div>
-              <div class="message-content">{{ msg.content }}</div>
+              <div v-if="msg.role === 2" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <div v-else class="message-content">{{ msg.content }}</div>
               <div v-if="msg.refChunks" class="message-refs">
                 <div style="font-weight: 500; margin-bottom: 4px">参考文档片段：</div>
                 <div>{{ msg.refChunks }}</div>
@@ -80,7 +81,7 @@
             </div>
             <div class="message-body">
               <div class="message-role">AI 助手</div>
-              <div class="message-content" aria-live="assertive">{{ streamingContent }}</div>
+              <div class="message-content markdown-body" v-html="renderMarkdown(streamingContent)" aria-live="assertive"></div>
             </div>
           </div>
 
@@ -139,18 +140,62 @@
             </el-button>
           </div>
         </div>
+
+        <!-- 返回顶部按钮 -->
+        <button
+          v-if="showBackToTop"
+          class="back-to-top"
+          @click="scrollToTop"
+          aria-label="返回顶部"
+          title="返回顶部"
+        >
+          <el-icon><ArrowUp /></el-icon>
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import {ref, onMounted, nextTick} from 'vue'
+import {ref, onMounted, nextTick, onBeforeUnmount} from 'vue'
 import {ElMessage} from 'element-plus'
-import {UserFilled, BellFilled, Plus, ChatDotRound, Loading, Promotion} from '@element-plus/icons-vue'
+import {UserFilled, BellFilled, Plus, ChatDotRound, Loading, Promotion, ArrowUp} from '@element-plus/icons-vue'
 import {chatApi} from '@/api/chat'
 import {kbApi} from '@/api/knowledgeBase'
 import type {ChatSessionVO, ChatMessageVO, ChatRequest, KnowledgeBase} from '@/types'
+import {marked} from 'marked'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/github-dark.css'
+
+// 配置 marked
+marked.setOptions({
+  highlight: function(code, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return hljs.highlight(code, { language: lang }).value
+      } catch (e) {
+        console.error('[Markdown] 代码高亮失败:', e)
+      }
+    }
+    return hljs.highlightAuto(code).value
+  },
+  breaks: true, // 启用换行符
+  gfm: true, // 启用 GitHub 风格 Markdown
+})
+
+/**
+ * 渲染 Markdown 内容
+ */
+const renderMarkdown = (content: string) => {
+  if (!content) return ''
+  try {
+    const html = marked.parse(content) as string
+    return html
+  } catch (e) {
+    console.error('[Markdown] 渲染失败:', e)
+    return content
+  }
+}
 
 const kbList = ref<KnowledgeBase[]>([])
 const selectedKbId = ref<number | null>(null)
@@ -162,6 +207,7 @@ const sending = ref(false)
 const loading = ref(false)
 const streamingContent = ref<string | null>(null)
 const messagesContainer = ref<HTMLElement>()
+const showBackToTop = ref(false)
 
 onMounted(async () => {
   await fetchKbList()
@@ -171,6 +217,14 @@ onMounted(async () => {
     selectedKbId.value = Number(urlKbId)
   }
   fetchSessions()
+
+  // 监听滚动事件
+  messagesContainer.value?.addEventListener('scroll', handleScroll)
+})
+
+onBeforeUnmount(() => {
+  // 清理滚动事件监听
+  messagesContainer.value?.removeEventListener('scroll', handleScroll)
 })
 
 const fetchKbList = async () => {
@@ -300,6 +354,28 @@ const scrollToBottom = () => {
       messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
     }
   })
+}
+
+/**
+ * 处理滚动事件，控制返回顶部按钮显示
+ */
+const handleScroll = () => {
+  if (messagesContainer.value) {
+    const scrollTop = messagesContainer.value.scrollTop
+    showBackToTop.value = scrollTop > 300
+  }
+}
+
+/**
+ * 返回顶部
+ */
+const scrollToTop = () => {
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    })
+  }
 }
 
 const formatDate = (d: string) => {
