@@ -69,13 +69,18 @@
           </div>
 
           <!-- 流式输出中的助手消息 -->
-          <div v-if="streamingContent !== null" class="message-row assistant">
+          <div v-if="streamingContent !== null"
+               class="message-row assistant"
+               role="log"
+               aria-live="polite"
+               aria-atomic="true"
+               aria-relevant="additions">
             <div class="message-avatar">
               <el-avatar :size="36" :icon="BellFilled" type="success"/>
             </div>
             <div class="message-body">
               <div class="message-role">AI 助手</div>
-              <div class="message-content">{{ streamingContent }}</div>
+              <div class="message-content" aria-live="assertive">{{ streamingContent }}</div>
             </div>
           </div>
 
@@ -114,14 +119,22 @@
                 placeholder="请输入你的问题..."
                 :disabled="!selectedKbId || sending"
                 @keydown.enter.ctrl="handleSend"
+                aria-label="消息输入框"
+                aria-describedby="input-help"
             />
+            <span id="input-help" class="visually-hidden">
+              按 Ctrl+Enter 发送消息
+            </span>
             <el-button
                 type="primary"
                 :icon="Promotion"
                 :loading="sending"
                 :disabled="!inputMessage.trim() || !selectedKbId"
+                :title="getSendButtonTitle()"
+                :aria-disabled="!selectedKbId"
                 @click="handleSend"
-                style="align-self: flex-end"
+                type="submit"
+                aria-label="发送消息"
             >
               发送
             </el-button>
@@ -268,6 +281,12 @@ const scrollToBottom = () => {
 const formatDate = (d: string) => {
   if (!d) return ''
   return new Date(d).toLocaleString('zh-CN', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})
+}
+
+const getSendButtonTitle = () => {
+  if (!selectedKbId.value) return '请先选择知识库再发送消息'
+  if (!inputMessage.value.trim()) return '请输入消息内容'
+  return '发送消息 (Ctrl+Enter)'
 }
 
 onMounted(() => {
@@ -419,5 +438,18 @@ onMounted(() => {
 
 .kb-selector {
   margin-bottom: 12px;
+}
+
+/* 屏幕阅读器专用：隐藏内容但保持可访问 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>
