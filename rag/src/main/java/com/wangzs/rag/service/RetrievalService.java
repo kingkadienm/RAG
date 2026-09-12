@@ -43,7 +43,8 @@ public class RetrievalService {
 
         SearchRequest.Builder builder = SearchRequest.builder()
                 .query(queryText)
-                .topK(topK);
+                .topK(topK)
+                .similarityThreshold(similarityThreshold);
 
         // 将 kb_id 过滤下推到 PGVector SQL 层，避免内存过滤导致 topK 被耗尽
         if (kbIds != null && !kbIds.isEmpty()) {
