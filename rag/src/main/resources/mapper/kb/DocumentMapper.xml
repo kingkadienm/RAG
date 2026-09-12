@@ -17,6 +17,7 @@
         <result property="vectorCount" column="vector_count"/>
         <result property="errorMsg" column="error_msg"/>
         <result property="version" column="version"/>
+        <result property="retryCount" column="retry_count"/>
         <result property="creatorId" column="creator_id"/>
         <result property="createdTime" column="created_time"/>
         <result property="updatedTime" column="updated_time"/>
@@ -25,7 +26,7 @@
 
     <sql id="Base_Column_List">
         id, kb_id, title, file_name, file_type, file_size, file_path, file_md5,
-        parse_status, vector_status, chunk_count, vector_count, error_msg, version,
+        parse_status, vector_status, chunk_count, vector_count, error_msg, version, retry_count,
         creator_id, created_time, updated_time, deleted
     </sql>
 
@@ -42,6 +43,12 @@
         SET deleted = 1
         WHERE kb_id = #{kbId}
           AND deleted = 0
+    </update>
+
+    <update id="incrementRetryCount">
+        UPDATE kb_document
+        SET retry_count = COALESCE(retry_count, 0) + 1
+        WHERE id = #{id}
     </update>
 
 </mapper>

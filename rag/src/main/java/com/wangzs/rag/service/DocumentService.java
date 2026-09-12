@@ -90,4 +90,9 @@ public interface DocumentService extends IService<Document> {
      * 批量删除知识库下的文档
      */
     void deleteByKbId(Long kbId);
+
+    /**
+     * 递增文档重试次数
+     */
+    void incrementRetryCount(Long id);
 }

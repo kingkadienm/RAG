@@ -63,19 +63,21 @@ public class DocumentRetryScheduler {
         log.info("发现 {} 个需要重试的文档", failedDocs.size());
 
         for (Document doc : failedDocs) {
-            int retryCount = countRetries(doc);
+            int retryCount = doc.getRetryCount() != null ? doc.getRetryCount() : 0;
             if (retryCount >= configService.getInt("rag.retry.max-attempts", 3)) {
-                log.warn("文档已达最大重试次数，跳过: docId={}, retries={}/{}, errorMsg={}",
-                        doc.getId(), retryCount, configService.getInt("rag.retry.max-attempts", 3), doc.getErrorMsg());
+                log.warn("文档已达最大重试次数，跳过: docId={}, retries={}/{}",
+                        doc.getId(), retryCount, configService.getInt("rag.retry.max-attempts", 3));
                 continue;
             }
 
-            // 重置状态
+            // 递增重试次数并保存
+            int nextAttempt = retryCount + 1;
             documentService.updateParseStatus(doc.getId(), ParseStatusEnum.INIT, 0, null);
             documentService.updateVectorStatus(doc.getId(), VectorStatusEnum.INIT, 0, null);
+            documentService.incrementRetryCount(doc.getId());
 
             // 发送 MQ 消息
-            sendParseMessage(doc, retryCount + 1);
+            sendParseMessage(doc, nextAttempt);
         }
     }
 
@@ -94,7 +96,8 @@ public class DocumentRetryScheduler {
                     && doc.getUpdatedTime().isBefore(java.time.LocalDateTime.now().minusMinutes(30))) {
                 log.warn("文档解析超时，重置为待解析: docId={}", doc.getId());
                 documentService.updateParseStatus(doc.getId(), ParseStatusEnum.INIT, 0, "解析超时，自动重试");
-                sendParseMessage(doc, 1);
+                documentService.incrementRetryCount(doc.getId());
+                sendParseMessage(doc, (doc.getRetryCount() != null ? doc.getRetryCount() : 0) + 1);
             }
         }
     }
@@ -150,25 +153,4 @@ public class DocumentRetryScheduler {
         }
     }
 
-    /**
-     * 统计已重试次数（从 errorMsg 中解析）
-     */
-    private int countRetries(Document doc) {
-        if (doc.getErrorMsg() == null) {
-            return 0;
-        }
-        String msg = doc.getErrorMsg();
-        if (msg.contains("重试")) {
-            try {
-                String[] parts = msg.split("[^0-9]");
-                for (String p : parts) {
-                    if (!p.isEmpty()) {
-                        return Integer.parseInt(p);
-                    }
-                }
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        return 0;
-    }
 }

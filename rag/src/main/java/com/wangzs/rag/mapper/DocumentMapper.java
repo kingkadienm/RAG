@@ -22,4 +22,9 @@ public interface DocumentMapper extends BaseMapper<Document> {
      * 批量删除知识库下的文档（逻辑删除）
      */
     int deleteByKbId(@Param("kbId") Long kbId);
+
+    /**
+     * 递增重试次数
+     */
+    int incrementRetryCount(@Param("id") Long id);
 }

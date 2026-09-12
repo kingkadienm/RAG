@@ -235,6 +235,12 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
         log.info("批量删除知识库下的文档: kbId={}", kbId);
     }
 
+    @Override
+    public void incrementRetryCount(Long id) {
+        baseMapper.incrementRetryCount(id);
+        log.info("递增文档重试次数: docId={}", id);
+    }
+
     /**
      * 辅助工具：保证任务在 Spring 事务 Commit 后再执行
      */

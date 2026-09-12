@@ -95,6 +95,11 @@ public class Document {
     private Integer version;
 
     /**
+     * 已重试次数（自动重试定时任务递增）
+     */
+    private Integer retryCount;
+
+    /**
      * 上传人 ID
      */
     private Long creatorId;
