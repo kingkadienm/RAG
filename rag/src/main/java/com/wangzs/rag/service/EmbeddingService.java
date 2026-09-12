@@ -5,6 +5,7 @@ import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.mapper.DocumentMapper;
+import com.wangzs.rag.service.ConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -30,9 +31,10 @@ public class EmbeddingService {
     private final EmbeddingModel embeddingModel;
     private final VectorStore vectorStore;
     private final DocumentMapper documentMapper;
+    private final ConfigService configService;
 
     /**
-     * 对文档分块进行向量化并保存
+     * 对文档分块进行向量化并保存（分批处理，失败回滚）
      *
      * @param doc    文档实体
      * @param chunks 文本分块列表
@@ -43,35 +45,57 @@ public class EmbeddingService {
             return 0;
         }
 
+        int batchSize = Math.max(1, configService.getInt("rag.embedding.batch-size", 50));
+        long delayMs = configService.getLong("rag.embedding.batch-delay-ms", 200);
+
+        int totalSaved = 0;
+
         try {
-            // 1. 批量向量化
-            List<String> contents = chunks.stream()
-                    .map(Chunk::getContent)
-                    .collect(Collectors.toList());
+            for (int start = 0; start < chunks.size(); start += batchSize) {
+                int end = Math.min(start + batchSize, chunks.size());
+                List<Chunk> batch = chunks.subList(start, end);
 
-            List<float[]> embeddings = embeddingModel.embed(contents);
+                int saved = embedBatch(doc, batch);
+                totalSaved += saved;
 
-            // 2. 构造 Spring AI Document 并保存到 PGVector
-            List<org.springframework.ai.document.Document> vectorDocs = new ArrayList<>();
-            for (int i = 0; i < chunks.size(); i++) {
-                Chunk chunk = chunks.get(i);
-                float[] embedding = embeddings.get(i);
-
-                org.springframework.ai.document.Document vectorDoc = new org.springframework.ai.document.Document(
-                        buildContent(chunk, doc),
-                        buildMetadata(doc, chunk, embedding)
-                );
-                vectorDocs.add(vectorDoc);
+                // 批次间限流（最后一组无需等待）
+                if (end < chunks.size()) {
+                    Thread.sleep(delayMs);
+                }
             }
-
-            vectorStore.add(vectorDocs);
-            log.info("向量化+入库完成: docId={}, chunks={}", doc.getId(), chunks.size());
-            return chunks.size();
-
         } catch (Exception e) {
-            log.error("向量化失败: docId={}", doc.getId(), e);
+            // 失败回滚：清理已入库的向量
+            deleteVectorsByDocId(doc.getId());
+            log.error("向量化失败，已回滚: docId={}, saved={}/{}", doc.getId(), totalSaved, chunks.size(), e);
             throw BizException.of(ErrorCode.EMBEDDING_FAILED);
         }
+
+        log.info("向量化+入库完成: docId={}, chunks={}", doc.getId(), totalSaved);
+        return totalSaved;
+    }
+
+    /**
+     * 单批次向量化（embedding + 入库）
+     */
+    private int embedBatch(Document doc, List<Chunk> batch) {
+        List<String> contents = batch.stream()
+                .map(Chunk::getContent)
+                .collect(Collectors.toList());
+
+        List<float[]> embeddings = embeddingModel.embed(contents);
+
+        List<org.springframework.ai.document.Document> vectorDocs = new ArrayList<>();
+        for (int i = 0; i < batch.size(); i++) {
+            Chunk chunk = batch.get(i);
+            float[] embedding = embeddings.get(i);
+            vectorDocs.add(new org.springframework.ai.document.Document(
+                    buildContent(chunk, doc),
+                    buildMetadata(doc, chunk, embedding)
+            ));
+        }
+
+        vectorStore.add(vectorDocs);
+        return batch.size();
     }
 
     /**
