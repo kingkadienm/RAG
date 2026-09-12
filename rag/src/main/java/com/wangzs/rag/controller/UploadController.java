@@ -61,48 +61,57 @@ public class UploadController {
         // 4. Tika MIME 检测
         String mimeType = fileCheckService.detectAndValidateMimeType(file, extension);
 
-        // 5. 创建上传记录
-        UploadRecord record = fileCheckService.createUploadRecord(file, mimeType, md5, storageType, request.getKbId(), userId);
-        uploadRecordService.save(record);
-
-        // 6. 创建文档记录
-        Document doc = documentService.create(
-                request.getKbId(), originalFilename, originalFilename,
-                extension, file.getSize(), null, md5, userId
-        );
-
-        // 7. 上传文件到存储
+        // 5. 先上传文件到存储（失败则无 DB 记录残留）
         String storageDir = "kb/" + request.getKbId() + "/";
         Object uploadResult;
+        String storedFileName = null;
         try {
             uploadResult = fileStorageService.upload(file, storageDir);
+            storedFileName = extractFileKey(uploadResult);
         } catch (Exception e) {
-            log.error("文件上传到存储失败: docId={}, fileName={}", doc.getId(), doc.getFileName(), e);
+            log.error("文件上传到存储失败: fileName={}", originalFilename, e);
             String rawMsg = e.getMessage();
             String safeMsg = (rawMsg != null && rawMsg.length() > 500) ? rawMsg.substring(0, 500) + "..." : rawMsg;
-            String errorMsg = "文件上传失败: " + (safeMsg != null ? safeMsg : "未知错误");
-            // 清理失败的数据库记录，允许用户重新上传同一文件
-            try {
-                uploadRecordService.removeById(record.getId());
-                documentService.removeById(doc.getId());
-                log.info("已清理失败的上传记录: uploadRecordId={}, docId={}", record.getId(), doc.getId());
-            } catch (Exception cleanupEx) {
-                log.error("清理失败记录时发生异常: uploadRecordId={}, docId={}", record.getId(), doc.getId(), cleanupEx);
-            }
-            throw BizException.of(ErrorCode.FILE_UPLOAD_FAILED.getCode(), errorMsg);
+            throw BizException.of(ErrorCode.FILE_UPLOAD_FAILED.getCode(),
+                    "文件上传失败: " + (safeMsg != null ? safeMsg : "未知错误"));
         }
-        log.info("文件上传成功: docId={}, storageType={}", doc.getId(), storageType);
 
-        // 8. 回填存储文件名
-        String storedFileName = extractFileKey(uploadResult);
-        record.setStoredFilename(storedFileName);
-        uploadRecordService.updateById(record);
-        documentService.updateFilePath(doc.getId(), storedFileName);
+        // 6. 创建上传记录 + 文档记录（DB 创建失败则清理已上传的文件）
+        UploadRecord record = null;
+        Document doc = null;
+        try {
+            record = fileCheckService.createUploadRecord(file, mimeType, md5, storageType, request.getKbId(), userId);
+            record.setStoredFilename(storedFileName);
+            uploadRecordService.save(record);
 
-        // 9. 异步发送 MQ 消息触发解析（不阻塞 HTTP 响应）
-        documentService.sendParseMessage(doc);
+            doc = documentService.create(
+                    request.getKbId(), originalFilename, originalFilename,
+                    extension, file.getSize(), storedFileName, md5, userId
+            );
+        } catch (Exception e) {
+            // DB 创建失败，清理已上传的文件 + 已创建的 DB 记录
+            if (storedFileName != null) {
+                try {
+                    fileStorageService.delete(storedFileName);
+                } catch (Exception deleteEx) {
+                    log.warn("删除存储文件失败: storedFileName={}", storedFileName, deleteEx);
+                }
+            }
+            if (record != null && record.getId() != null) {
+                try {
+                    uploadRecordService.removeById(record.getId());
+                } catch (Exception cleanupEx) {
+                    log.error("清理上传记录失败: uploadRecordId={}", record.getId(), cleanupEx);
+                }
+            }
+            log.error("创建数据库记录失败，已清理存储文件: fileName={}", originalFilename, e);
+            String rawMsg = e.getMessage();
+            String safeMsg = (rawMsg != null && rawMsg.length() > 500) ? rawMsg.substring(0, 500) + "..." : rawMsg;
+            throw BizException.of(ErrorCode.FILE_UPLOAD_FAILED.getCode(),
+                    "创建记录失败: " + (safeMsg != null ? safeMsg : "未知错误"));
+        }
 
-        // 10. 返回结果
+        // 7. 返回结果（MQ 消息由 documentService.create 内部发送）
         Map<String, Object> data = new HashMap<>();
         data.put("docId", doc.getId());
         data.put("fileName", originalFilename);
