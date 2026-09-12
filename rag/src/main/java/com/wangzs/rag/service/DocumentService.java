@@ -42,6 +42,13 @@ public interface DocumentService extends IService<Document> {
                     Long fileSize, String filePath, String fileMd5, Long creatorId);
 
     /**
+     * 创建文档记录 + 上传记录（同一事务，保证数据一致性）
+     */
+    Document createWithUploadRecord(Long kbId, String title, String fileName, String fileType,
+                                    Long fileSize, String filePath, String fileMd5, Long creatorId,
+                                    String storedFilename, String mimeType, String storageType);
+
+    /**
      * 重新解析 / 重试解析文档（自动累加版本号保证幂等）
      */
     void retryParse(Long id);

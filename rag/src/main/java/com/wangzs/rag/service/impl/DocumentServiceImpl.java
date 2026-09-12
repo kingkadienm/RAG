@@ -9,6 +9,7 @@ import com.wangzs.rag.enums.ParseStatusEnum;
 import com.wangzs.rag.enums.VectorStatusEnum;
 import com.wangzs.rag.mapper.DocumentMapper;
 import com.wangzs.rag.mapper.KnowledgeBaseMapper;
+import com.wangzs.rag.mapper.UploadRecordMapper;
 import com.wangzs.rag.model.dto.DocumentParseMsgDTO;
 import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.model.entity.KnowledgeBase;
@@ -38,6 +39,7 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
 
     // 直接使用继承自 ServiceImpl 的 baseMapper，无需再定义 private final DocumentMapper documentMapper;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
+    private final UploadRecordMapper uploadRecordMapper;
     private final RocketMQTemplate rocketMQTemplate;
 
     @Value("${rag.rocketmq.topic}")
@@ -72,12 +74,39 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
         doc.setVectorCount(0);
         doc.setVersion(1);      // 初始版本号为 1
         doc.setCreatorId(creatorId);
+        doc.setRetryCount(0);   // 初始重试次数为 0
 
         baseMapper.insert(doc);
         log.info("创建文档记录成功: id={}, kbId={}, fileName={}, fileMd5={}", doc.getId(), kbId, fileName, fileMd5);
 
         // 3. 事务提交之后再异步发送 MQ 消息，防止消费端查不到 DB 记录
         executeAfterTransactionCommit(() -> sendParseMessage(doc));
+
+        return doc;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Document createWithUploadRecord(Long kbId, String title, String fileName, String fileType,
+                                            Long fileSize, String filePath, String fileMd5, Long creatorId,
+                                            String storedFilename, String mimeType, String storageType) {
+        // 1. 创建 Document（回填 storedFilename）
+        Document doc = create(kbId, title, fileName, fileType, fileSize, filePath, fileMd5, creatorId);
+
+        // 2. 创建 UploadRecord（关联 docId）
+        com.wangzs.rag.model.entity.UploadRecord record = new com.wangzs.rag.model.entity.UploadRecord();
+        record.setKbId(kbId);
+        record.setDocId(doc.getId());
+        record.setOriginalFilename(fileName);
+        record.setStoredFilename(storedFilename);
+        record.setFileSize(fileSize);
+        record.setFileMd5(fileMd5);
+        record.setMimeType(mimeType);
+        record.setStorageType(storageType);
+        record.setCheckStatus(1); // 通过
+        record.setUploaderId(creatorId);
+        uploadRecordMapper.insert(record);
+        log.info("创建上传记录成功: uploadRecordId={}, docId={}", record.getId(), doc.getId());
 
         return doc;
     }

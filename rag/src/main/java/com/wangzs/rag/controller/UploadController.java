@@ -6,7 +6,6 @@ import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
 import com.wangzs.rag.model.dto.UploadFileRequest;
 import com.wangzs.rag.model.entity.Document;
-import com.wangzs.rag.model.entity.UploadRecord;
 import com.wangzs.rag.service.*;
 import com.wangzs.rag.service.file.FileUploadVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,7 +33,6 @@ public class UploadController {
     private final FileParseService fileParseService;
     private final FileStorageService fileStorageService;
     private final DocumentService documentService;
-    private final UploadRecordService uploadRecordService;
     private final ConfigService configService;
 
     @Operation(summary = "上传知识库文件")
@@ -76,32 +74,21 @@ public class UploadController {
                     "文件上传失败: " + (safeMsg != null ? safeMsg : "未知错误"));
         }
 
-        // 6. 创建上传记录 + 文档记录（DB 创建失败则清理已上传的文件）
-        UploadRecord record = null;
-        Document doc = null;
+        // 6. 创建上传记录 + 文档记录（同一事务，保证数据一致性）
+        Document doc;
         try {
-            record = fileCheckService.createUploadRecord(file, mimeType, md5, storageType, request.getKbId(), userId);
-            record.setStoredFilename(storedFileName);
-            uploadRecordService.save(record);
-
-            doc = documentService.create(
+            doc = documentService.createWithUploadRecord(
                     request.getKbId(), originalFilename, originalFilename,
-                    extension, file.getSize(), storedFileName, md5, userId
+                    extension, file.getSize(), storedFileName, md5, userId,
+                    storedFileName, mimeType, storageType
             );
         } catch (Exception e) {
-            // DB 创建失败，清理已上传的文件 + 已创建的 DB 记录
+            // DB 创建失败，清理已上传的文件
             if (storedFileName != null) {
                 try {
                     fileStorageService.delete(storedFileName);
                 } catch (Exception deleteEx) {
                     log.warn("删除存储文件失败: storedFileName={}", storedFileName, deleteEx);
-                }
-            }
-            if (record != null && record.getId() != null) {
-                try {
-                    uploadRecordService.removeById(record.getId());
-                } catch (Exception cleanupEx) {
-                    log.error("清理上传记录失败: uploadRecordId={}", record.getId(), cleanupEx);
                 }
             }
             log.error("创建数据库记录失败，已清理存储文件: fileName={}", originalFilename, e);
