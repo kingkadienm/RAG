@@ -10,22 +10,33 @@
         :rules="rules"
         size="large"
         @keyup.enter="handleLogin"
+        aria-label="登录表单"
       >
-        <el-form-item prop="username">
+        <el-form-item label="用户名" prop="username" required>
           <el-input
             v-model="form.username"
-            placeholder="用户名"
+            placeholder="请输入用户名"
             :prefix-icon="User"
+            aria-describedby="username-help"
+            autocomplete="username"
           />
+          <template #help>
+            <div id="username-help" class="form-help-text">3-20个字符</div>
+          </template>
         </el-form-item>
-        <el-form-item prop="password">
+        <el-form-item label="密码" prop="password" required>
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="密码"
+            placeholder="请输入密码"
             :prefix-icon="Lock"
             show-password
+            aria-describedby="password-help"
+            autocomplete="current-password"
           />
+          <template #help>
+            <div id="password-help" class="form-help-text">6-32个字符</div>
+          </template>
         </el-form-item>
         <el-form-item>
           <el-button
@@ -33,6 +44,7 @@
             style="width: 100%"
             :loading="loading"
             @click="handleLogin"
+            native-type="submit"
           >
             登 录
           </el-button>
@@ -175,5 +187,13 @@ const handleRegister = async () => {
   margin-bottom: 32px;
   font-size: 14px;
   color: #909399;
+}
+
+/* 表单帮助文本样式 */
+.form-help-text {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+  margin-top: 4px;
 }
 </style>
