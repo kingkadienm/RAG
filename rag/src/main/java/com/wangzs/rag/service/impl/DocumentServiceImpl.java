@@ -14,6 +14,7 @@ import com.wangzs.rag.model.dto.DocumentParseMsgDTO;
 import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.model.entity.KnowledgeBase;
 import com.wangzs.rag.service.DocumentService;
+import com.wangzs.rag.service.EmbeddingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.SendCallback;
@@ -41,6 +42,7 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final UploadRecordMapper uploadRecordMapper;
     private final RocketMQTemplate rocketMQTemplate;
+    private final EmbeddingService embeddingService;
 
     @Value("${rag.rocketmq.topic}")
     private String parseTopic;
@@ -116,6 +118,9 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
     @Transactional(rollbackFor = Exception.class)
     public void retryParse(Long id) {
         Document doc = getById(id);
+
+        // 清理旧向量（避免重试后残留历史向量）
+        embeddingService.deleteVectorsByDocId(id);
 
         int newVersion = (doc.getVersion() == null ? 0 : doc.getVersion()) + 1;
 
@@ -253,6 +258,10 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         Document doc = getById(id);
+
+        // 清理已入库的向量
+        embeddingService.deleteVectorsByDocId(id);
+
         doc.setDeleted(1);
         baseMapper.updateById(doc);
         log.info("删除文档: id={}", id);
