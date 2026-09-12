@@ -33,14 +33,22 @@
               :model-value="row.configValue"
               disabled
               size="small"
+              :aria-label="`配置值（系统配置）：${row.configKey}`"
             />
             <el-input
               v-else
               v-model="row._editingValue"
               size="small"
+              :aria-label="`编辑配置项：${row.configKey}`"
+              :aria-describedby="`config-${row.id}-desc`"
               @blur="handleUpdate(row)"
               @keyup.enter="handleUpdate(row)"
+              @keyup.escape="row._editingValue = row.configValue"
             />
+            <span :id="`config-${row.id}-desc`" class="visually-hidden">
+              配置键：{{ row.configKey }}，当前值：{{ row.configValue }}
+              {{ row.isSystem === 1 ? '系统配置，不可编辑' : '按 Enter 保存，按 Escape 取消' }}
+            </span>
           </template>
         </el-table-column>
 
@@ -243,5 +251,18 @@ onMounted(fetchList)
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* 屏幕阅读器专用：隐藏内容但保持可访问 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>
