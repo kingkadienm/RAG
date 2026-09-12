@@ -144,6 +144,8 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
             if (!parseSuccess) {
                 documentService.updateParseStatus(docId, ParseStatusEnum.FAILED, 0, "解析阶段失败: " + safeError);
             } else {
+                // 向量化失败：清理已写入 PGVector 的向量，保证数据一致
+                embeddingService.deleteVectorsByDocId(docId);
                 documentService.updateVectorStatus(docId, VectorStatusEnum.FAILED, 0, "向量化阶段失败: " + safeError);
             }
         }

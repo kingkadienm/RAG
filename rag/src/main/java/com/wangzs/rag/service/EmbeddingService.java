@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -70,6 +71,20 @@ public class EmbeddingService {
         } catch (Exception e) {
             log.error("向量化失败: docId={}", doc.getId(), e);
             throw BizException.of(ErrorCode.EMBEDDING_FAILED);
+        }
+    }
+
+    /**
+     * 删除文档的向量（清理 PGVector 中 doc_id 匹配的记录）
+     * 用于向量化失败时的补偿清理，保证 MySQL 与 PGVector 一致
+     */
+    public void deleteVectorsByDocId(Long docId) {
+        try {
+            FilterExpressionBuilder builder = new FilterExpressionBuilder();
+            vectorStore.delete(builder.in("doc_id", List.of(docId)).build());
+            log.info("已清理文档向量: docId={}", docId);
+        } catch (Exception e) {
+            log.warn("清理文档向量失败（不影响主流程）: docId={}", docId, e);
         }
     }
 
