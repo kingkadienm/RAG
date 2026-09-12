@@ -5,10 +5,8 @@ import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.model.dto.ChatRequest;
 import com.wangzs.rag.model.dto.ChatResponse;
 import com.wangzs.rag.model.entity.ChatMessage;
-import com.wangzs.rag.model.entity.ChatSession;
-import com.wangzs.rag.mapper.ChatMessageMapper;
-import com.wangzs.rag.mapper.ChatSessionMapper;
 import com.wangzs.rag.util.RedisUtil;
+import com.wangzs.rag.model.entity.ChatSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -16,17 +14,13 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * RAG 对话服务
- *
- * <p>systemPrompt、topK 从 ConfigService（数据库）读取，支持动态调整
+ * RAG 对话服务（核心对话逻辑）
  */
 @Slf4j
 @Service
@@ -36,9 +30,9 @@ public class ChatService {
     private final ChatClient.Builder chatClientBuilder;
     private final RetrievalService retrievalService;
     private final RedisUtil redisUtil;
-    private final ChatSessionMapper chatSessionMapper;
-    private final ChatMessageMapper chatMessageMapper;
     private final ConfigService configService;
+    private final ChatSessionService chatSessionService;
+    private final ChatMessageService chatMessageService;
 
     private String getSystemPrompt() {
         return configService.getString("rag.chat.system-prompt",
@@ -86,8 +80,7 @@ public class ChatService {
             org.springframework.ai.chat.model.ChatResponse response = chatClient.prompt()
                     .messages(messages.toArray(new Message[0]))
                     .call()
-                    .chatResponse()
-                    ;
+                    .chatResponse();
 
             answer = response != null && response.getResult() != null
                     ? response.getResult().getOutput().getText()
@@ -98,7 +91,7 @@ public class ChatService {
         }
 
         // 5. 保存对话记录（包含参考文档片段）
-        saveMessages(sessionId, request.getQuestion(), answer, searchResults);
+        chatMessageService.saveMessages(sessionId, request.getQuestion(), answer, searchResults);
 
         // 6. 构建响应
         return buildResponse(sessionId, answer, searchResults);
@@ -137,7 +130,7 @@ public class ChatService {
                 .doOnComplete(() -> {
                     // 流结束后保存对话记录（简化处理）
                     String fullAnswer = "流式回复（请查看前端完整内容）";
-                    saveMessages(sessionId, request.getQuestion(), fullAnswer, searchResults);
+                    chatMessageService.saveMessages(sessionId, request.getQuestion(), fullAnswer, searchResults);
                 })
                 .doOnError(e -> log.error("流式对话出错", e));
     }
@@ -158,17 +151,12 @@ public class ChatService {
             session.setTitle("新对话");
             session.setMessageCount(0);
             session.setDeleted(0);
-            chatSessionMapper.insert(session);
+            chatSessionService.createSessionDirect(session);
             return session.getSessionId();
         }
 
         // 验证会话是否存在
-        ChatSession session = chatSessionMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatSession>()
-                        .eq(ChatSession::getSessionId, sessionId)
-                        .eq(ChatSession::getDeleted, 0)
-        );
-        if (session == null) {
+        if (!chatSessionService.verifySessionOwnership(sessionId)) {
             return ensureSession(null, kbId); // 创建新会话
         }
 
@@ -224,77 +212,6 @@ public class ChatService {
     }
 
     /**
-     * 保存对话消息
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void saveMessages(String sessionId, String question, String answer,
-                             List<RetrievalService.SearchResult> results) {
-        LocalDateTime now = LocalDateTime.now();
-
-        // 构建参考文档片段的 JSON（ref_chunks 字段）
-        String refChunksJson = null;
-        if (results != null && !results.isEmpty()) {
-            refChunksJson = "[" + results.stream()
-                    .map(r -> String.format(
-                            "{\"docId\":%d,\"fileName\":\"%s\",\"content\":\"%s\",\"score\":%.4f}",
-                            r.docId(), r.fileName(),
-                            r.content().length() > 100 ? r.content().substring(0, 100) + "..." : r.content(),
-                            r.score() != null ? r.score() : 0.0))
-                    .reduce((a, b) -> a + "," + b)
-                    .orElse("[]") + "]";
-        }
-
-        // 粗略估算 token 数（中文按 1.5 字符/token，英文按 4 字符/token）
-        int questionTokens = estimateTokenCount(question);
-        int answerTokens = estimateTokenCount(answer);
-        int totalTokens = questionTokens + answerTokens;
-
-        // 保存用户消息
-        ChatMessage userMsg = new ChatMessage();
-        userMsg.setSessionId(sessionId);
-        userMsg.setRole(1); // 用户
-        userMsg.setContent(question);
-        userMsg.setTokenCount(questionTokens);
-        userMsg.setCreatedTime(now);
-        chatMessageMapper.insert(userMsg);
-
-        // 保存助手回复
-        ChatMessage assistantMsg = new ChatMessage();
-        assistantMsg.setSessionId(sessionId);
-        assistantMsg.setRole(2); // 助手
-        assistantMsg.setContent(answer);
-        assistantMsg.setRefChunks(refChunksJson);
-        assistantMsg.setTokenCount(answerTokens);
-        assistantMsg.setCreatedTime(now);
-        chatMessageMapper.insert(assistantMsg);
-
-        // 更新会话消息计数（冗余字段，避免每次 COUNT）
-        chatSessionMapper.update(null,
-                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<ChatSession>()
-                        .eq(ChatSession::getSessionId, sessionId)
-                        .setSql("message_count = message_count + 2")
-                        .set(ChatSession::getUpdatedTime, now));
-
-        // 缓存最近消息到 Redis
-        String redisKey = "chat:ctx:" + sessionId;
-        List<ChatMessage> ctx = new ArrayList<>();
-        ctx.add(userMsg);
-        ctx.add(assistantMsg);
-        redisUtil.set(redisKey, ctx, 1800); // 30 分钟
-    }
-
-    /**
-     * 粗略估算 token 数
-     */
-    private int estimateTokenCount(String text) {
-        if (text == null || text.isEmpty()) return 0;
-        // 简单估算：中文字符按 1.5 token，其他按 0.25 token（4字符=1 token）
-        long chineseChars = text.chars().filter(c -> c >= 0x4E00 && c <= 0x9FA5).count();
-        long otherChars = text.length() - chineseChars;
-        return (int) (chineseChars * 1.5 + otherChars * 0.25);
-    }
-
-    /**
      * 构建响应
      */
     private ChatResponse buildResponse(String sessionId, String answer,
@@ -318,63 +235,5 @@ public class ChatService {
         }
 
         return response;
-    }
-
-    // ==================== 会话管理 ====================
-
-    /**
-     * 查询用户的会话列表
-     *
-     * @param userId 用户 ID
-     * @param kbId   可选，按知识库 ID 过滤（null 则不过滤）
-     */
-    public List<ChatSession> listSessions(Long userId, Long kbId) {
-        return chatSessionMapper.selectList(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatSession>()
-                        .eq(ChatSession::getUserId, userId)
-                        .eq(kbId != null, ChatSession::getKbId, kbId)
-                        .eq(ChatSession::getDeleted, 0)
-                        .orderByDesc(ChatSession::getUpdatedTime)
-        );
-    }
-
-    /**
-     * 查询会话的历史消息
-     */
-    public List<ChatMessage> listMessages(String sessionId) {
-        // 先验证会话是否存在
-        ChatSession session = chatSessionMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatSession>()
-                        .eq(ChatSession::getSessionId, sessionId)
-                        .eq(ChatSession::getDeleted, 0)
-        );
-        if (session == null) {
-            throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
-        }
-
-        return chatMessageMapper.selectList(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatMessage>()
-                        .eq(ChatMessage::getSessionId, sessionId)
-                        .orderByAsc(ChatMessage::getCreatedTime)
-        );
-    }
-
-    /**
-     * 删除会话（逻辑删除）
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void deleteSession(String sessionId) {
-        ChatSession session = chatSessionMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatSession>()
-                        .eq(ChatSession::getSessionId, sessionId)
-                        .eq(ChatSession::getDeleted, 0)
-        );
-        if (session == null) {
-            throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
-        }
-
-        session.setDeleted(1);
-        chatSessionMapper.updateById(session);
-        log.info("删除会话: sessionId={}", sessionId);
     }
 }

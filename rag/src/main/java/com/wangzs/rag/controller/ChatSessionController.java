@@ -7,9 +7,8 @@ import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
 import com.wangzs.rag.model.entity.ChatMessage;
 import com.wangzs.rag.model.entity.ChatSession;
-import com.wangzs.rag.mapper.ChatMessageMapper;
-import com.wangzs.rag.mapper.ChatSessionMapper;
-import com.wangzs.rag.service.ChatService;
+import com.wangzs.rag.service.ChatSessionService;
+import com.wangzs.rag.service.ChatMessageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -29,9 +28,8 @@ import java.util.List;
 @SaCheckLogin
 public class ChatSessionController {
 
-    private final ChatService chatService;
-    private final ChatSessionMapper chatSessionMapper;
-    private final ChatMessageMapper chatMessageMapper;
+    private final ChatSessionService chatSessionService;
+    private final ChatMessageService chatMessageService;
 
     /** 获取当前登录用户 ID */
     private Long getLoginUserId() {
@@ -41,11 +39,7 @@ public class ChatSessionController {
 
     /** 校验会话归属：返回会话实体，非归属用户抛出 NOT_FOUND */
     private ChatSession verifySessionOwnership(String sessionId) {
-        ChatSession session = chatSessionMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatSession>()
-                        .eq(ChatSession::getSessionId, sessionId)
-                        .eq(ChatSession::getDeleted, 0)
-        );
+        ChatSession session = chatSessionService.getSession(sessionId);
         if (session == null) {
             throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
         }
@@ -63,10 +57,8 @@ public class ChatSessionController {
     @Operation(summary = "查询会话列表")
     @GetMapping
     public ApiResult<List<ChatSession>> list(@RequestParam(name = "kbId", required = false) Long kbId) {
-        Object loginId = StpUtil.getLoginId();
-        Long userId = loginId instanceof Long ? (Long) loginId : Long.parseLong(loginId.toString());
-
-        List<ChatSession> sessions = chatService.listSessions(userId, kbId);
+        Long userId = getLoginUserId();
+        List<ChatSession> sessions = chatSessionService.listSessions(userId, kbId);
         return ApiResult.success(sessions);
     }
 
@@ -77,7 +69,7 @@ public class ChatSessionController {
     @GetMapping("/{sessionId}/messages")
     public ApiResult<List<ChatMessage>> getMessages(@PathVariable String sessionId) {
         verifySessionOwnership(sessionId);
-        List<ChatMessage> messages = chatService.listMessages(sessionId);
+        List<ChatMessage> messages = chatMessageService.listMessages(sessionId);
         return ApiResult.success(messages);
     }
 
@@ -88,7 +80,7 @@ public class ChatSessionController {
     @DeleteMapping("/{sessionId}")
     public ApiResult<Void> delete(@PathVariable String sessionId) {
         verifySessionOwnership(sessionId);
-        chatService.deleteSession(sessionId);
+        chatSessionService.deleteSession(getLoginUserId(), sessionId);
         return ApiResult.success(null, "删除成功");
     }
 }
