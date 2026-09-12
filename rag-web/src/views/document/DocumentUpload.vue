@@ -75,13 +75,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { documentApi } from '@/api/document'
 import { kbApi } from '@/api/knowledgeBase'
-import type { UploadFile } from 'element-plus'
+import type { UploadFile, UploadRawFile } from 'element-plus'
 import type { KnowledgeBase } from '@/types'
 
 const route = useRoute()
@@ -116,7 +116,7 @@ const handlePaste = async (event: ClipboardEvent) => {
 
   // 将粘贴的文件添加到上传列表
   for (const file of files) {
-    const uploadFile: UploadFile = {
+    const uploadFile: UploadRawFile = {
       name: file.name,
       raw: file,
       size: file.size,
@@ -141,7 +141,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('paste', handlePaste)
-})
 })
 
 const handleFileChange = (_file: UploadFile, files: UploadFile[]) => {
