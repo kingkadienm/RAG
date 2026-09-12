@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wangzs.rag.mapper.DocumentMapper">
+
+    <resultMap id="BaseResultMap" type="com.wangzs.rag.model.entity.Document">
+        <id property="id" column="id"/>
+        <result property="kbId" column="kb_id"/>
+        <result property="title" column="title"/>
+        <result property="fileName" column="file_name"/>
+        <result property="fileType" column="file_type"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="filePath" column="file_path"/>
+        <result property="fileMd5" column="file_md5"/>
+        <result property="parseStatus" column="parse_status"/>
+        <result property="vectorStatus" column="vector_status"/>
+        <result property="chunkCount" column="chunk_count"/>
+        <result property="vectorCount" column="vector_count"/>
+        <result property="errorMsg" column="error_msg"/>
+        <result property="version" column="version"/>
+        <result property="creatorId" column="creator_id"/>
+        <result property="createdTime" column="created_time"/>
+        <result property="updatedTime" column="updated_time"/>
+        <result property="deleted" column="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, kb_id, title, file_name, file_type, file_size, file_path, file_md5,
+        parse_status, vector_status, chunk_count, vector_count, error_msg, version,
+        creator_id, created_time, updated_time, deleted
+    </sql>
+
+    <select id="selectByKbId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_document
+        WHERE deleted = 0
+          AND kb_id = #{kbId}
+        ORDER BY created_time DESC
+    </select>
+
+    <update id="deleteByKbId">
+        UPDATE kb_document
+        SET deleted = 1
+        WHERE kb_id = #{kbId}
+          AND deleted = 0
+    </update>
+
+</mapper>

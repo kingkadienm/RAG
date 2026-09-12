@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(New-Item -ItemType Directory -Force -Path \"D:\\\\workspace\\\\Java\\\\RAG\\\\rag-web\\\\src\\\\{api,assets\\\\css,assets\\\\images,components,composables,layout,router,stores,types,utils,views\\\\{auth,knowledge-base,document,chat\\\\}}\" | Out-Null; Write-Host \"Directory structure created\")",
+      "Bash(mvn install *)"
+    ]
+  }
+}

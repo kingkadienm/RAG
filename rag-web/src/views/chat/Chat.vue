@@ -1,0 +1,404 @@
+<template>
+  <div class="chat-page">
+    <div class="chat-container">
+      <!-- 左侧会话列表 -->
+      <div class="chat-sidebar">
+        <div class="chat-sidebar-header">
+          <el-select
+              v-model="selectedKbId"
+              placeholder="选择知识库"
+              size="small"
+              style="width: 100%"
+              filterable
+              @change="onKbChange"
+          >
+            <el-option
+                v-for="kb in kbList"
+                :key="kb.id"
+                :label="kb.name"
+                :value="kb.id"
+            />
+          </el-select>
+          <el-button
+              type="primary"
+              size="small"
+              style="width: 100%; margin-top: 8px"
+              :icon="Plus"
+              @click="createNewSession"
+          >
+            新建对话
+          </el-button>
+        </div>
+        <div class="session-list">
+          <div
+              v-for="session in sessions"
+              :key="session.sessionId"
+              :class="['session-item', { active: currentSessionId === session.sessionId }]"
+              @click="switchSession(session)"
+          >
+            <div class="session-title">{{ session.title || '新对话' }}</div>
+            <div class="session-time">{{ formatDate(session.updatedTime) }}</div>
+          </div>
+          <el-empty v-if="sessions.length === 0" description="暂无对话" :image-size="60"/>
+        </div>
+      </div>
+
+      <!-- 右侧聊天区域 -->
+      <div class="chat-main">
+        <div class="chat-messages" ref="messagesContainer">
+          <div v-if="messages.length === 0" class="empty-chat">
+            <el-icon :size="64" color="#dcdfe6">
+              <ChatDotRound/>
+            </el-icon>
+            <p>选择一个知识库，开始智能对话</p>
+          </div>
+
+          <div v-for="msg in messages" :key="msg.id" :class="['message-row', msg.role === 1 ? 'user' : 'assistant']">
+            <div class="message-avatar">
+              <el-avatar :size="36" :icon="msg.role === 1 ? UserFilled : BellFilled"
+                         :type="msg.role === 1 ? 'primary' : 'success'"/>
+            </div>
+            <div class="message-body">
+              <div class="message-role">{{ msg.role === 1 ? '我' : 'AI 助手' }}</div>
+              <div class="message-content">{{ msg.content }}</div>
+              <div v-if="msg.refChunks" class="message-refs">
+                <div style="font-weight: 500; margin-bottom: 4px">参考文档片段：</div>
+                <div>{{ msg.refChunks }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="loading" class="message-row assistant">
+            <div class="message-avatar">
+              <el-avatar :size="36" :icon="BellFilled" type="success"/>
+            </div>
+            <div class="message-body">
+              <div class="message-role">AI 助手</div>
+              <div class="message-content">
+                <el-icon class="is-loading">
+                  <Loading/>
+                </el-icon>
+                正在思考...
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input-area">
+          <div class="kb-selector" v-if="!selectedKbId">
+            <el-select v-model="selectedKbId" placeholder="请先选择知识库" style="width: 100%">
+              <el-option
+                  v-for="kb in kbList"
+                  :key="kb.id"
+                  :label="kb.name"
+                  :value="kb.id"
+              />
+            </el-select>
+          </div>
+          <div style="display: flex; gap: 12px">
+            <el-input
+                v-model="inputMessage"
+                type="textarea"
+                :rows="2"
+                placeholder="请输入你的问题..."
+                :disabled="!selectedKbId || sending"
+                @keydown.enter.ctrl="handleSend"
+            />
+            <el-button
+                type="primary"
+                :icon="Promotion"
+                :loading="sending"
+                :disabled="!inputMessage.trim() || !selectedKbId"
+                @click="handleSend"
+                style="align-self: flex-end"
+            >
+              发送
+            </el-button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import {ref, reactive, onMounted, nextTick} from 'vue'
+import {ElMessage} from 'element-plus'
+import {UserFilled, BellFilled, Plus, ChatDotRound, Loading, Promotion} from '@element-plus/icons-vue'
+import {chatApi} from '@/api/chat'
+import {kbApi} from '@/api/knowledgeBase'
+import {useAuthStore} from '@/stores/auth'
+import type {ChatSessionVO, ChatMessageVO, ChatRequest, ChatResponse, KnowledgeBase} from '@/types'
+
+const authStore = useAuthStore()
+
+const kbList = ref<KnowledgeBase[]>([])
+const selectedKbId = ref<number | null>(null)
+const sessions = ref<ChatSessionVO[]>([])
+const currentSessionId = ref('')
+const messages = ref<ChatMessageVO[]>([])
+const inputMessage = ref('')
+const sending = ref(false)
+const loading = ref(false)
+const messagesContainer = ref<HTMLElement>()
+
+onMounted(async () => {
+  await fetchKbList()
+  // 从 URL 参数获取知识库 ID
+  const urlKbId = new URLSearchParams(window.location.hash.split('?')[1] || '').get('kbId')
+  if (urlKbId) {
+    selectedKbId.value = Number(urlKbId)
+  }
+  fetchSessions()
+})
+
+const fetchKbList = async () => {
+  const res = await kbApi.list()
+  kbList.value = res.data
+  if (kbList.value.length > 0 && !selectedKbId.value) {
+    selectedKbId.value = kbList.value[0].id
+  }
+}
+
+const onKbChange = () => {
+  currentSessionId.value = ''
+  messages.value = []
+  fetchSessions()
+}
+
+const fetchSessions = async () => {
+  if (!selectedKbId.value) return
+  loading.value = true
+  try {
+    const raw = await chatApi.getSessions()
+    const list = Array.isArray(raw) ? raw : (raw?.data ?? [])
+    const filtered = list.filter(s => !selectedKbId.value || s.kbId === selectedKbId.value)
+    sessions.value = filtered
+  } catch (e) {
+    console.error('[Chat] fetchSessions error:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+const createNewSession = () => {
+  currentSessionId.value = ''
+  messages.value = []
+}
+
+const switchSession = async (session: ChatSessionVO) => {
+  currentSessionId.value = session.sessionId
+  const res = await chatApi.getMessages(session.sessionId)
+  messages.value = res.data
+  scrollToBottom()
+}
+
+const handleSend = async () => {
+  if (!inputMessage.value.trim() || !selectedKbId.value || sending.value) return
+
+  const userMessage = inputMessage.value.trim()
+  inputMessage.value = ''
+
+  // 添加用户消息到 UI
+  const userMsg: ChatMessageVO = {
+    id: Date.now(),
+    sessionId: currentSessionId.value || 'temp',
+    role: 1,
+    content: userMessage,
+    createdTime: new Date().toISOString(),
+  }
+  messages.value.push(userMsg)
+  scrollToBottom()
+
+  sending.value = true
+  try {
+    const data: ChatRequest = {
+      question: userMessage,
+      sessionId: currentSessionId.value || undefined,
+      kbIds: [selectedKbId.value],
+    }
+
+    const res: ChatResponse = await chatApi.chat(data)
+    currentSessionId.value = res.sessionId
+
+    const assistantMsg: ChatMessageVO = {
+      id: Date.now() + 1,
+      sessionId: res.sessionId,
+      role: 2,
+      content: res.answer,
+      refChunks: res.references?.map(c => `[文档${c.docId} ${c.fileName} 相似度:${c.score.toFixed(2)}]`).join(', ') || '',
+      createdTime: new Date().toISOString(),
+    }
+    messages.value.push(assistantMsg)
+    scrollToBottom()
+  } catch (e) {
+    // handled by interceptor
+  } finally {
+    sending.value = false
+  }
+}
+
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  })
+}
+
+const formatDate = (d: string) => {
+  if (!d) return ''
+  return new Date(d).toLocaleString('zh-CN', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})
+}
+
+onMounted(() => {
+})
+</script>
+
+<style scoped>
+.chat-page {
+  height: 100%;
+}
+
+.chat-container {
+  height: calc(100vh - 140px);
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.chat-sidebar {
+  width: 280px;
+  border-right: 1px solid #e4e7ed;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-sidebar-header {
+  padding: 12px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.session-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f5f7fa;
+  transition: background 0.2s;
+}
+
+.session-item:hover {
+  background: #f5f7fa;
+}
+
+.session-item.active {
+  background: #ecf5ff;
+  border-left: 3px solid #409eff;
+}
+
+.session-title {
+  font-size: 14px;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-time {
+  font-size: 12px;
+  color: #c0c4cc;
+  margin-top: 4px;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-messages {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  background: #f8f9fa;
+}
+
+.empty-chat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #c0c4cc;
+  font-size: 16px;
+  gap: 12px;
+}
+
+.message-row {
+  display: flex;
+  margin-bottom: 20px;
+  gap: 12px;
+}
+
+.message-row.user {
+  flex-direction: row-reverse;
+}
+
+.message-body {
+  max-width: 70%;
+}
+
+.message-role {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+  text-align: right;
+}
+
+.message-row.user .message-role {
+  text-align: left;
+}
+
+.message-content {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.8;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.message-row.assistant .message-content {
+  background: #fff;
+  border: 1px solid #e4e7ed;
+}
+
+.message-row.user .message-content {
+  background: #409eff;
+  color: #fff;
+}
+
+.message-refs {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #606266;
+  border: 1px solid #d4edfc;
+}
+
+.chat-input-area {
+  padding: 16px 20px;
+  border-top: 1px solid #e4e7ed;
+  background: #fff;
+}
+
+.kb-selector {
+  margin-bottom: 12px;
+}
+</style>

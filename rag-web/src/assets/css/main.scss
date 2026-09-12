@@ -1,0 +1,308 @@
+/* ========== 全局样式 ========== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', Arial, sans-serif;
+}
+
+/* ========== 登录页 ========== */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.login-card {
+  width: 420px;
+  padding: 40px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.login-title {
+  text-align: center;
+  margin-bottom: 8px;
+  font-size: 26px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.login-subtitle {
+  text-align: center;
+  margin-bottom: 32px;
+  font-size: 14px;
+  color: #909399;
+}
+
+/* ========== 布局 ========== */
+.layout-container {
+  height: 100vh;
+}
+
+.layout-aside {
+  background-color: #304156;
+  color: #fff;
+  transition: width 0.3s;
+}
+
+.layout-aside .el-menu {
+  border-right: none;
+}
+
+.logo-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 60px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.layout-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: #fff;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.layout-main {
+  padding: 20px;
+  background: #f0f2f5;
+  overflow-y: auto;
+}
+
+/* ========== 卡片通用样式 ========== */
+.page-card {
+  margin-bottom: 16px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ========== 聊天 ========== */
+.chat-container {
+  display: flex;
+  height: calc(100vh - 140px);
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.chat-sidebar {
+  width: 280px;
+  border-right: 1px solid #e4e7ed;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.session-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f5f7fa;
+  transition: background 0.2s;
+}
+
+.session-item:hover {
+  background: #f5f7fa;
+}
+
+.session-item.active {
+  background: #ecf5ff;
+  border-left: 3px solid #409eff;
+}
+
+.session-title {
+  font-size: 14px;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-time {
+  font-size: 12px;
+  color: #c0c4cc;
+  margin-top: 4px;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-messages {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  background: #f8f9fa;
+}
+
+.message-row {
+  display: flex;
+  margin-bottom: 16px;
+  gap: 12px;
+}
+
+.message-row.user {
+  flex-direction: row-reverse;
+}
+
+.message-avatar {
+  flex-shrink: 0;
+}
+
+.message-content {
+  max-width: 70%;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.message-row.assistant .message-content {
+  background: #fff;
+  border: 1px solid #e4e7ed;
+}
+
+.message-row.user .message-content {
+  background: #409eff;
+  color: #fff;
+}
+
+.message-role {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.message-refs {
+  margin-top: 8px;
+  padding: 8px;
+  background: #f0f9ff;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #606266;
+}
+
+.chat-input-area {
+  padding: 16px 20px;
+  border-top: 1px solid #e4e7ed;
+  background: #fff;
+}
+
+.kb-selector {
+  margin-bottom: 12px;
+}
+
+/* ========== 文档列表 ========== */
+.file-icon {
+  font-size: 32px;
+  color: #409eff;
+}
+
+.file-icon.pdf { color: #f56c6c; }
+.file-icon.docx { color: #409eff; }
+.file-icon.txt { color: #67c23a; }
+.file-icon.md { color: #e6a23c; }
+.file-icon.xlsx { color: #67c23a; }
+.file-icon.pptx { color: #e6a23c; }
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.status-dot.pending { background: #c0c4cc; }
+.status-dot.parsing { background: #e6a23c; }
+.status-dot.parsed { background: #67c23a; }
+.status-dot.failed { background: #f56c6c; }
+.status-dot.vectorizing { background: #e6a23c; }
+.status-dot.vectorized { background: #67c23a; }
+
+/* ========== 上传区域 ========== */
+.upload-area {
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  padding: 40px;
+  text-align: center;
+  transition: border-color 0.3s;
+  cursor: pointer;
+}
+
+.upload-area:hover {
+  border-color: #409eff;
+}
+
+.upload-area .el-upload-dragger {
+  border: none;
+  width: 100%;
+  height: auto;
+  padding: 0;
+}
+
+/* ========== 分块预览 ========== */
+.chunk-preview {
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.8;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

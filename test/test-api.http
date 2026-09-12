@@ -1,0 +1,31 @@
+### 1. 写入一段短文本
+
+POST http://localhost:8080/test/vector/import
+Content-Type: application/json
+
+{
+  "content": "Java 是一种面向对象的编程语言。Java 具有跨平台、面向对象、自动内存管理等特点。Java 程序通常运行在 JVM 虚拟机上。",
+  "category": "java"
+}
+
+### 2. 写入一段较长文本，测试文本切片
+
+POST http://localhost:8080/test/vector/import
+Content-Type: application/json
+
+{
+  "content": "Spring Boot 是基于 Spring Framework 的快速开发框架。Spring Boot 通过自动配置、起步依赖和约定优于配置等方式简化 Spring 应用程序的开发。开发者可以使用 Spring Boot 快速创建 Web 应用、REST API、数据库应用以及微服务。Spring Boot 本身并不是一个新的 Web 框架，而是在 Spring Framework 基础上提供了一套更加方便的开发方式。Spring Boot 可以自动根据项目中的依赖推断应用程序需要的配置，例如项目引入 Spring Web 后，可以自动配置 Tomcat 和 Spring MVC。项目引入数据库驱动后，也可以根据配置创建 DataSource。Spring Boot 的核心思想之一就是减少开发者需要编写的配置代码，让开发者更加关注业务逻辑。与此同时，Spring Boot 还提供 Actuator 用于监控应用程序运行状态，可以查看健康检查、Bean、指标等信息。",
+  "category": "spring-boot"
+}
+
+### 3. 查询 Java 相关内容
+
+GET http://localhost:8080/test/vector/search?query=Java是什么
+
+### 4. 查询 Spring Boot 相关内容
+
+GET http://localhost:8080/test/vector/search?query=Spring Boot有什么特点
+
+### 5. 查询 JVM 相关内容
+
+GET http://localhost:8080/test/vector/search?query=Java程序运行在哪里

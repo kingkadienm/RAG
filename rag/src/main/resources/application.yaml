@@ -1,0 +1,135 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: rag-service
+
+  # ==================== MySQL 数据源 ====================
+  datasource:
+   jdbc-url: jdbc:mysql://127.0.0.1:3306/rag_v1?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+   username: root
+   password: Y5TRj54n6ArXbMEB
+   driver-class-name: com.mysql.cj.jdbc.Driver
+   type: com.zaxxer.hikari.HikariDataSource
+   hikari:
+     minimum-idle: 5
+     maximum-pool-size: 10
+     idle-timeout: 30000
+     max-lifetime: 1800000
+
+  # ==================== Redis ====================
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: RCtCZmzcCepnxbCW
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+
+  # ==================== AI（DashScope） ====================
+  ai:
+    dashscope:
+      api-key: ${AI_DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: qwen-max
+          temperature: 0.7
+          top-p: 0.8
+      embedding:
+        options:
+          model: text-embedding-v2
+
+    vectorstore:
+      pgvector:
+        initialize-schema: false
+
+# ==================== PostgreSQL ====================
+app:
+  datasource:
+    pgvector:
+      jdbc-url: jdbc:postgresql://127.0.0.1:5432/vector_db
+      username: postgres
+      password: postgres123456
+      driver-class-name: org.postgresql.Driver
+
+# ==================== RocketMQ ====================
+rocketmq:
+  name-server: 127.0.0.1:9876
+  producer:
+    group: rag-producer-group
+    send-message-timeout: 10000
+    retry-times-when-send-failed: 3
+
+# ==================== Sa-Token 配置 ====================
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  timeout: 2592000          # 30 天
+  active-timeout: -1        # 不活跃不超时
+  is-read-cookie: false
+  is-read-header: true
+  is-write-header: true
+  is-store-http-only: true
+  token-style: uuid
+  jwt-secret-key: rag-secret-key-change-in-production
+  is-read-body: false
+  # 拦截路由配置（白名单）
+  exclude-urls: /auth/login, /auth/register, /upload/**, /doc/preview/**, /error
+  # 拦截路由配置（鉴权）
+  auth-url: /auth/need-auth
+# ==================== 文件存储配置（策略模式切换） ====================
+file:
+  storage:
+    type: local  # local | cloud
+    local:
+      upload-path: ${user.dir}/rag-uploads/
+      url-prefix: http://127.0.0.1:8080/upload/
+    cloud:
+      endpoint: http://127.0.0.1:9000
+      bucket: rag-files
+      access-key: minioadmin
+      secret-key: minioadmin
+      region: cn-north-1
+      public-url-prefix: http://127.0.0.1:9000/rag-files/
+      path-style-access: true
+# ==================== MyBatis-Plus ====================
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+      id-type: auto
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.wangzs.rag.model.entity
+  type-enums-package: com.wangzs.rag.enums
+
+# ==================== RAG 业务配置 ====================
+rag:
+  chunk:
+    size: 500           # 分块大小（字符数）
+    overlap: 50         # 重叠大小（字符数）
+  retrieval:
+    top-k: 5            # 检索 Top-K
+    similarity-threshold: 0.7   # 向量相似度阈值
+  file:
+    max-size: 52428800  # 50MB（字节）
+    allowed-extensions: pdf,docx,txt,md,xlsx,pptx
+  rocketmq:
+    topic: rag-document-parse
+    consumer-group: rag-parse-consumer
+  # ==================== 自动重试配置 ====================
+  retry:
+    max-attempts: 3           # 最大重试次数
+    interval-minutes: 5       # 重试间隔（分钟）
+  config:
+    refresh-interval-seconds: 60  # 配置缓存自动刷新间隔（秒）
