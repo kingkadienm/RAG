@@ -23,8 +23,9 @@ import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendCallback;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
-import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.wangzs.rag.chunk.Chunk;
 
@@ -187,6 +188,117 @@ public class DocumentController {
         data.put("errorMsg", doc.getErrorMsg());
 
         return ApiResult.success(data);
+    }
+
+    /**
+     * 查询文档解析进度（SSE 流式推送，状态变化时自动推送）
+     */
+    @Operation(summary = "查询文档解析进度（SSE 流式）")
+    @GetMapping("/{id}/parse-status/stream")
+    public SseEmitter streamParseStatus(@PathVariable Long id) {
+        Document doc = verifyDocumentOwnership(id);
+
+        SseEmitter emitter = new SseEmitter(300000L); // 5 分钟超时
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.initialize();
+
+        scheduler.scheduleAtFixedRate(() -> {
+            try {
+                Document currentDoc = documentService.getById(id);
+                if (currentDoc == null) {
+                    emitter.complete();
+                    return;
+                }
+
+                // 检查状态是否变化
+                String stage;
+                int progress;
+                String message;
+
+                switch (currentDoc.getParseStatus()) {
+                    case INIT -> {
+                        stage = "pending";
+                        progress = 0;
+                        message = "等待解析";
+                    }
+                    case PARSING -> {
+                        stage = "parsing";
+                        progress = 30;
+                        message = "正在解析文档内容...";
+                    }
+                    case SUCCESS -> {
+                        switch (currentDoc.getVectorStatus()) {
+                            case INIT -> {
+                                stage = "vectorizing";
+                                progress = 60;
+                                message = "文档解析完成，正在向量化...";
+                            }
+                            case VECTORIZING -> {
+                                stage = "vectorizing";
+                                progress = 80;
+                                message = "正在向量化入库...";
+                            }
+                            case SUCCESS -> {
+                                stage = "completed";
+                                progress = 100;
+                                message = "处理完成";
+                            }
+                            case FAILED -> {
+                                stage = "vector_failed";
+                                progress = 60;
+                                message = currentDoc.getErrorMsg() != null ? currentDoc.getErrorMsg() : "向量化失败";
+                            }
+                            default -> {
+                                stage = "unknown";
+                                progress = 50;
+                                message = "状态异常";
+                            }
+                        }
+                    }
+                    case FAILED -> {
+                        stage = "parse_failed";
+                        progress = 0;
+                        message = currentDoc.getErrorMsg() != null ? currentDoc.getErrorMsg() : "解析失败";
+                    }
+                    default -> {
+                        stage = "unknown";
+                        progress = 0;
+                        message = "未知状态";
+                    }
+                }
+
+                Map<String, Object> data = new HashMap<>();
+                data.put("stage", stage);
+                data.put("progress", progress);
+                data.put("message", message);
+                data.put("parseStatus", currentDoc.getParseStatus().getCode());
+                data.put("vectorStatus", currentDoc.getVectorStatus() != null ? currentDoc.getVectorStatus().getCode() : 0);
+                data.put("chunkCount", currentDoc.getChunkCount());
+                data.put("vectorCount", currentDoc.getVectorCount());
+                data.put("errorMsg", currentDoc.getErrorMsg());
+
+                emitter.send(SseEmitter.event()
+                        .name("status")
+                        .data(data));
+
+                // 解析完成或失败时结束流
+                if (stage.equals("completed") || stage.equals("parse_failed") || stage.equals("vector_failed")) {
+                    emitter.complete();
+                    scheduler.shutdown();
+                }
+            } catch (Exception e) {
+                log.debug("SSE 流结束或发送失败: docId={}", id, e);
+                emitter.complete();
+                scheduler.shutdown();
+            }
+        }, 1000); // 每秒推送一次
+
+        emitter.onCompletion(() -> scheduler.shutdown());
+        emitter.onError((e) -> scheduler.shutdown());
+        emitter.onTimeout(() -> scheduler.shutdown());
+
+        return emitter;
     }
 
     // ==================== 操作接口 ====================

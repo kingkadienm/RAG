@@ -113,13 +113,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import {ref, reactive, onMounted, onUnmounted} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, Upload, Refresh } from '@element-plus/icons-vue'
 import { documentApi } from '@/api/document'
+import { useAuthStore } from '@/stores/auth'
 import type { Document as DocType } from '@/types'
 import { PARSE_STATUS_MAP, VECTOR_STATUS_MAP } from '@/types'
+
+const authStore = useAuthStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -129,6 +132,9 @@ const docList = ref<DocType[]>([])
 const kbId = ref<number>(Number(route.params.kbId))
 const chunkDialogVisible = ref(false)
 const chunkPreview = ref('')
+
+// SSE 连接映射：docId -> EventSource
+const sseMap = new Map<number, EventSource>()
 
 const pagination = reactive({
   pageNum: 1,
@@ -156,6 +162,10 @@ const formatDate = (d: string) => {
 }
 
 const fetchList = async () => {
+  // 先清理旧的 SSE 连接
+  sseMap.forEach(es => es.close())
+  sseMap.clear()
+
   loading.value = true
   try {
     const res = await documentApi.list(kbId.value, {
@@ -164,9 +174,63 @@ const fetchList = async () => {
     })
     docList.value = res.data.records || []
     pagination.total = res.data.total || 0
+
+    // 为正在解析/向量化的文档订阅 SSE 进度推送
+    docList.value.forEach(doc => {
+      if (doc.parseStatus === 1 || doc.parseStatus === 2 && (doc.vectorStatus === 1 || doc.vectorStatus === 0)) {
+        subscribeParseStatus(doc.id)
+      }
+    })
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * 订阅文档解析进度 SSE 推送
+ */
+const subscribeParseStatus = (docId: number) => {
+  // 避免重复订阅
+  if (sseMap.has(docId)) return
+
+  const token = authStore.token
+  const url = `/api/doc/${docId}/parse-status/stream`
+  const eventSource = new EventSource(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  } as any)
+
+  eventSource.addEventListener('status', (event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data)
+      const idx = docList.value.findIndex(d => d.id === docId)
+      if (idx !== -1) {
+        // 更新文档状态
+        docList.value[idx] = {
+          ...docList.value[idx],
+          parseStatus: data.parseStatus,
+          vectorStatus: data.vectorStatus,
+          chunkCount: data.chunkCount,
+          vectorCount: data.vectorCount,
+          errorMsg: data.errorMsg,
+        }
+        // 解析完成后关闭 SSE
+        if (data.stage === 'completed' || data.stage === 'parse_failed' || data.stage === 'vector_failed') {
+          eventSource.close()
+          sseMap.delete(docId)
+        }
+      }
+    } catch (e) {
+      console.error('[SSE] 解析状态更新失败:', e)
+    }
+  })
+
+  eventSource.onerror = () => {
+    console.warn(`[SSE] 文档 ${docId} 连接断开`)
+    eventSource.close()
+    sseMap.delete(docId)
+  }
+
+  sseMap.set(docId, eventSource)
 }
 
 const goUpload = () => {
@@ -216,6 +280,12 @@ const handleRetry = async (row: DocType) => {
 }
 
 onMounted(fetchList)
+
+// 组件卸载时清理 SSE 连接
+onUnmounted(() => {
+  sseMap.forEach(es => es.close())
+  sseMap.clear()
+})
 </script>
 
 <style scoped>
