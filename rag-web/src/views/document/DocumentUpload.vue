@@ -18,10 +18,16 @@
         accept=".pdf,.docx,.txt,.md,.xlsx,.pptx"
         :on-change="handleFileChange"
         :file-list="fileList"
+        aria-label="文件上传区域，支持拖放、点击选择或粘贴文件"
       >
         <el-icon class="el-icon--upload" :size="60"><UploadFilled /></el-icon>
         <div class="el-upload__text">
           将文件拖到此处，或<em>点击上传</em>
+        </div>
+        <div class="upload-keyboard-hint">
+          <el-text size="small" type="info">
+            提示：也可以按 Ctrl+V 粘贴文件
+          </el-text>
         </div>
         <template #tip>
           <div class="el-upload__tip">
@@ -69,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
@@ -88,10 +94,54 @@ const uploading = ref(false)
 const progressDialogVisible = ref(false)
 const uploadResults = ref<Array<{ fileName: string; success: boolean; message: string }>>([])
 
+/**
+ * 处理粘贴事件（Ctrl+V），支持从剪贴板粘贴文件
+ */
+const handlePaste = async (event: ClipboardEvent) => {
+  const items = event.clipboardData?.items
+  if (!items) return
+
+  const files: File[] = []
+  for (const item of items) {
+    if (item.kind === 'file') {
+      const file = item.getAsFile()
+      if (file) files.push(file)
+    }
+  }
+
+  if (files.length === 0) return
+
+  // 阻止默认粘贴行为
+  event.preventDefault()
+
+  // 将粘贴的文件添加到上传列表
+  for (const file of files) {
+    const uploadFile: UploadFile = {
+      name: file.name,
+      raw: file,
+      size: file.size,
+      status: 'ready',
+      percentage: 0,
+      uid: Date.now() + Math.random(),
+    }
+    fileList.value.push(uploadFile)
+  }
+
+  ElMessage.success(`已添加 ${files.length} 个文件到上传列表`)
+}
+
 onMounted(async () => {
   const kbs = (await kbApi.list()).data
   const kb = kbs.find((k) => k.id === kbId.value)
   if (kb) kbInfo.value = kb
+
+  // 监听粘贴事件（键盘导航支持）
+  window.addEventListener('paste', handlePaste)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('paste', handlePaste)
+})
 })
 
 const handleFileChange = (_file: UploadFile, files: UploadFile[]) => {
@@ -146,5 +196,16 @@ const goToList = () => {
 
 .el-upload-dragger {
   width: 100% !important;
+}
+
+/* 键盘提示样式 */
+.upload-keyboard-hint {
+  margin-top: 8px;
+  text-align: center;
+}
+
+.upload-keyboard-hint :deep(.el-text) {
+  font-size: 12px;
+  color: #909399;
 }
 </style>
