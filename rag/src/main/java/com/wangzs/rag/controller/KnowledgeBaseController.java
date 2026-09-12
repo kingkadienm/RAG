@@ -6,10 +6,7 @@ import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
 import com.wangzs.rag.common.util.AuthUtil;
-import com.wangzs.rag.model.dto.ChatRequest;
-import com.wangzs.rag.model.dto.ChatResponse;
 import com.wangzs.rag.model.dto.KnowledgeBaseCreateDTO;
-import com.wangzs.rag.model.dto.UploadFileRequest;
 import com.wangzs.rag.model.entity.KnowledgeBase;
 import com.wangzs.rag.service.*;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,7 +14,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 

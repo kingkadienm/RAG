@@ -1,8 +1,6 @@
 package com.wangzs.rag.controller.auth;
 
 import cn.dev33.satoken.stp.StpUtil;
-import com.wangzs.rag.common.exception.BizException;
-import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
 import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.model.dto.LoginRequest;

@@ -8,7 +8,6 @@ import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.enums.ParseStatusEnum;
 import com.wangzs.rag.enums.VectorStatusEnum;
 import com.wangzs.rag.model.dto.ChunkVO;
-import com.wangzs.rag.model.dto.DocumentParseMsgDTO;
 import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.service.DocumentService;
 import com.wangzs.rag.service.FileParseService;
@@ -19,10 +18,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.rocketmq.client.producer.DefaultMQProducer;
-import org.apache.rocketmq.client.producer.SendCallback;
-import org.apache.rocketmq.client.producer.SendResult;
-import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -50,7 +45,6 @@ public class DocumentController {
     private final FileParseService fileParseService;
     private final FileStorageService fileStorageService;
     private final ConfigService configService;
-    private final RocketMQTemplate rocketMQTemplate;
     private final ObjectMapper objectMapper;
 
     /** 校验文档归属：返回文档实体，非归属用户抛出 NOT_FOUND */

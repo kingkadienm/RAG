@@ -6,7 +6,8 @@
       "Bash(git add *)",
       "Bash(git commit -m 'fix: P1-2 reorder upload flow to prevent zombie files and data inconsistency *)",
       "Bash(mvn dependency:tree)",
-      "Bash(mvn dependency:tree -pl common)"
+      "Bash(mvn dependency:tree -pl common)",
+      "Bash(mvn compile *)"
     ]
   }
 }
