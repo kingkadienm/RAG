@@ -36,7 +36,7 @@ export interface KnowledgeBase {
   createdTime: string
   updatedTime: string
   deleted: number
-  documentCount?: number
+  // documentCount?: number
 }
 
 export interface KnowledgeBaseCreateDTO {
@@ -142,12 +142,18 @@ export interface ChatReference {
   score: number
 }
 
+export interface ChatStreamResult {
+  content: string
+  sessionId: string
+  refChunks?: ChatReference[] | null
+}
+
 export interface ChatMessageVO {
   id: number
   sessionId: string
   role: number
   content: string
-  refChunks?: string
+  refChunks?:  ChatReference[] | null
   tokenCount?: number
   createdTime: string
 }

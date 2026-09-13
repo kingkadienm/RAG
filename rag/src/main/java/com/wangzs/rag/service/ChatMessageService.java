@@ -1,5 +1,8 @@
 package com.wangzs.rag.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wangzs.rag.model.entity.ChatMessage;
 import com.wangzs.rag.model.entity.ChatSession;
 import com.wangzs.rag.mapper.ChatMessageMapper;
@@ -25,6 +28,7 @@ public class ChatMessageService {
     private final ChatSessionMapper chatSessionMapper;
     private final ChatMessageMapper chatMessageMapper;
     private final RedisUtil redisUtil;
+    private final ObjectMapper objectMapper; // Jackson JSON 序列化
 
     /**
      * 保存对话消息（用户提问 + 助手回复）
@@ -37,14 +41,26 @@ public class ChatMessageService {
         // 构建参考文档片段的 JSON（ref_chunks 字段）
         String refChunksJson = null;
         if (results != null && !results.isEmpty()) {
-            refChunksJson = "[" + results.stream()
-                    .map(r -> String.format(
-                            "{\"docId\":%d,\"fileName\":\"%s\",\"content\":\"%s\",\"score\":%.4f}",
-                            r.docId(), r.fileName(),
-                            r.content().length() > 100 ? r.content().substring(0, 100) + "..." : r.content(),
-                            r.score() != null ? r.score() : 0.0))
-                    .reduce((a, b) -> a + "," + b)
-                    .orElse("[]") + "]";
+            try {
+                ArrayNode refChunksArray = objectMapper.createArrayNode();
+                for (RetrievalService.SearchResult r : results) {
+                    ObjectNode chunkNode = objectMapper.createObjectNode();
+                    chunkNode.put("docId", r.docId());
+                    chunkNode.put("fileName", r.fileName());
+                    // 截断过长的 content（最多 100 字符）
+                    String truncatedContent = r.content();
+                    if (truncatedContent != null && truncatedContent.length() > 100) {
+                        truncatedContent = truncatedContent.substring(0, 100) + "...";
+                    }
+                    chunkNode.put("content", truncatedContent);
+                    chunkNode.put("score", r.score() != null ? r.score() : 0.0);
+                    refChunksArray.add(chunkNode);
+                }
+                refChunksJson = objectMapper.writeValueAsString(refChunksArray);
+            } catch (Exception e) {
+                log.warn("构建 ref_chunks JSON 失败，将保存为空数组", e);
+                refChunksJson = "[]";
+            }
         }
 
         // 粗略估算 token 数

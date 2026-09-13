@@ -62,12 +62,14 @@ CREATE TABLE kb_upload_record (
                                   check_status      TINYINT      NOT NULL DEFAULT 1 COMMENT '校验状态：1-通过 2-拒绝',
                                   reject_reason     VARCHAR(512) NULL COMMENT '拒绝原因',
                                   uploader_id       BIGINT       NOT NULL DEFAULT 0 COMMENT '上传人 ID',
+                                  deleted           TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除：0-未删除 1-已删除',
                                   created_time      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
                                   PRIMARY KEY (id),
                                   UNIQUE KEY uk_md5_kb (file_md5, kb_id),
                                   INDEX idx_kb_id (kb_id),
                                   INDEX idx_doc_id (doc_id),
-                                  INDEX idx_uploader_id (uploader_id)
+                                  INDEX idx_uploader_id (uploader_id),
+                                  INDEX idx_deleted (deleted)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
@@ -152,4 +154,32 @@ CREATE TABLE sys_user (
 -- 密码请替换为实际 BCrypt 密文（如 123456 对应的 hash）
 INSERT INTO sys_user (username, password, nickname, role)
 VALUES ('admin', '$2b$10$ClHeN8wmkX7NlsvT.CyYCe95C6DtznP0rRQzktbmB6AKbvUmpZTlW', '管理员', 1);
+
+-- ========================================
+-- 文档分块表
+-- ========================================
+-- 执行时机：向量化阶段成功后 INSERT；重试时复用；文档删除时级联清理
+-- 来源：schema_document_chunk.sql
+DROP TABLE IF EXISTS kb_document_chunk;
+CREATE TABLE kb_document_chunk (
+    id              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键 ID',
+    doc_id          BIGINT       NOT NULL COMMENT '所属文档 ID（关联 kb_document.id）',
+    kb_id           BIGINT       NOT NULL COMMENT '所属知识库 ID（冗余，方便按 kb 清理）',
+    chunk_index     INT          NOT NULL COMMENT '分块序号（从 0 开始）',
+    title           VARCHAR(256) NULL COMMENT '文档标题',
+    section_path    VARCHAR(512) NULL COMMENT '章节路径（如 "集团开票信息汇总 > 阿里巴巴"）',
+    content         TEXT         NOT NULL COMMENT '分块文本内容',
+    token_count     INT          NOT NULL DEFAULT 0 COMMENT 'Token 数量',
+    char_length     INT          NOT NULL DEFAULT 0 COMMENT '字符长度',
+    embedding_text  TEXT         NULL COMMENT '用于生成向量的文本（= title + sectionPath + content）',
+    version         INT          NOT NULL DEFAULT 1 COMMENT '文档版本号（与 kb_document.version 同步）',
+    created_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (id),
+    INDEX idx_doc_id (doc_id),
+    INDEX idx_doc_version (doc_id, version),
+    INDEX idx_kb_id (kb_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci
+  COMMENT = '文档分块表';
 

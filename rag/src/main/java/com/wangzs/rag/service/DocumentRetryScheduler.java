@@ -36,6 +36,7 @@ public class DocumentRetryScheduler {
     private final ConfigService configService;
     private final RocketMQTemplate rocketMQTemplate;
     private final ObjectMapper objectMapper;
+    private final com.wangzs.rag.service.DocumentChunkService chunkService;
 
 
     /**
@@ -70,14 +71,28 @@ public class DocumentRetryScheduler {
                 continue;
             }
 
-            // 递增重试次数并保存
             int nextAttempt = retryCount + 1;
-            documentService.updateParseStatus(doc.getId(), ParseStatusEnum.INIT, 0, null);
-            documentService.updateVectorStatus(doc.getId(), VectorStatusEnum.INIT, 0, null);
-            documentService.incrementRetryCount(doc.getId());
 
-            // 发送 MQ 消息
-            sendParseMessage(doc, nextAttempt);
+            // 根据失败阶段决定重试策略
+            boolean parseFailed = doc.getParseStatus() == com.wangzs.rag.enums.ParseStatusEnum.FAILED;
+            boolean vectorFailed = doc.getVectorStatus() == com.wangzs.rag.enums.VectorStatusEnum.FAILED;
+
+            if (parseFailed) {
+                // 解析失败：全量重置 + 清理分块
+                chunkService.deleteByDocId(doc.getId());
+                documentService.updateParseStatus(doc.getId(), ParseStatusEnum.INIT, 0, null);
+                documentService.updateVectorStatus(doc.getId(), VectorStatusEnum.INIT, 0, null);
+                documentService.incrementRetryCount(doc.getId());
+                sendParseMessage(doc, nextAttempt);
+                log.info("自动重试（解析失败）: docId={}, attempt={}", doc.getId(), nextAttempt);
+
+            } else if (vectorFailed) {
+                // 向量化失败：只重置向量化阶段，保留分块
+                documentService.updateVectorStatus(doc.getId(), VectorStatusEnum.INIT, 0, null);
+                documentService.incrementRetryCount(doc.getId());
+                sendParseMessage(doc, nextAttempt);
+                log.info("自动重试（向量化失败）: docId={}, attempt={}", doc.getId(), nextAttempt);
+            }
         }
     }
 

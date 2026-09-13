@@ -7,6 +7,8 @@ import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import App from './App.vue'
 import router from './router'
 import './assets/css/main.scss'
+import 'github-markdown-css/github-markdown.css'
+import './styles/chat-markdown.css'
 
 const app = createApp(App)
 

@@ -157,14 +157,17 @@ const getParseType = (status: number) => PARSE_STATUS_MAP[status]?.type || 'info
 
 onMounted(async () => {
   try {
-    // 并行请求所有数据
-    const [kbs, docsResult] = await Promise.all([
-      kbApi.list(),
-      documentApi.list({ pageNum: 1, pageSize: 5 })
-    ])
+    // 先获取知识库列表
+    const kbsRes = await kbApi.list()
+    const kbs = kbsRes.data
+    kbList.value = kbs
+    stats.value.kbCount = kbs.filter((kb) => kb.deleted === 0).length
 
-    kbList.value = kbs.data
-    stats.value.kbCount = kbs.data.filter((kb) => kb.deleted === 0).length
+    // 使用第一个知识库的 ID 获取文档列表
+    const firstKbId = kbs.length > 0 ? kbs[0].id : 0
+    const docsResult = firstKbId > 0
+      ? await documentApi.list(firstKbId, { pageNum: 1, pageSize: 5 })
+      : { list: [], total: 0 }
 
     recentDocs.value = docsResult.list || []
     stats.value.docCount = docsResult.total || 0

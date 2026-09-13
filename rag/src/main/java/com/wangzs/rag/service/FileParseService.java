@@ -1,7 +1,8 @@
 package com.wangzs.rag.service;
 
 import com.wangzs.rag.chunk.Chunk;
-import com.wangzs.rag.chunk.TextSplitter;
+import com.wangzs.rag.chunk.ChunkingPipeline;
+import com.wangzs.rag.chunk.ParsedDocumentBuilder;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.strategy.FileParseStrategy;
@@ -25,7 +26,8 @@ import java.util.List;
 public class FileParseService {
 
     private final ParseStrategyFactory parseStrategyFactory;
-    private final TextSplitter textSplitter;
+    private final ParsedDocumentBuilder parsedDocumentBuilder;
+    private final ChunkingPipeline chunkingPipeline;
 
     /**
      * 解析文件并分块（推荐：基于 InputStream 流式解析，防止大文件 OOM）
@@ -34,9 +36,14 @@ public class FileParseService {
      * @param fileName    文件名
      * @param fileType    文件类型/扩展名
      * @param mimeType    MIME类型
+     * @param documentId  文档 ID（可为 null，解析阶段可能尚未持久化）
+     * @param kbId        知识库 ID
+     * @param title       文档标题（可为 null）
      * @return 分块列表
      */
-    public List<Chunk> parseAndChunk(InputStream inputStream, String fileName, String fileType, String mimeType) {
+    public List<Chunk> parseAndChunk(InputStream inputStream, String fileName,
+                                     String fileType, String mimeType,
+                                     Long documentId, Long kbId, String title) {
         if (inputStream == null) {
             log.warn("文件输入流为空，跳过解析: fileName={}", fileName);
             return List.of();
@@ -52,9 +59,15 @@ public class FileParseService {
 
         log.info("文件文本提取完成: fileName={}, textLength={}", fileName, textContent.length());
 
-        // 2. 文本分块
+        // 2. 构建统一文档模型
+        String effectiveFileType = StringUtils.hasText(fileType) ? fileType : getFileExtension(fileName);
+        com.wangzs.rag.chunk.model.ParsedDocument document = parsedDocumentBuilder.fromText(
+                textContent, documentId, kbId, fileName, effectiveFileType, title
+        );
+
+        // 3. 执行切片 Pipeline（结构切片 → 特殊内容 → 长度约束）
         try {
-            List<Chunk> chunks = textSplitter.split(textContent);
+            List<Chunk> chunks = chunkingPipeline.execute(document);
             log.info("文件解析与分块成功: fileName={}, chunksCount={}", fileName, chunks.size());
             return chunks;
         } catch (Exception e) {
@@ -66,13 +79,15 @@ public class FileParseService {
     /**
      * 兼容重载：解析字节数组（自动转为 InputStream 统一处理）
      */
-    public List<Chunk> parseAndChunk(byte[] fileBytes, String fileName, String fileType, String mimeType) {
+    public List<Chunk> parseAndChunk(byte[] fileBytes, String fileName,
+                                     String fileType, String mimeType,
+                                     Long documentId, Long kbId, String title) {
         if (fileBytes == null || fileBytes.length == 0) {
             log.warn("文件字节为空，跳过解析: fileName={}", fileName);
             return List.of();
         }
         try (InputStream inputStream = new ByteArrayInputStream(fileBytes)) {
-            return parseAndChunk(inputStream, fileName, fileType, mimeType);
+            return parseAndChunk(inputStream, fileName, fileType, mimeType, documentId, kbId, title);
         } catch (Exception e) {
             log.error("字节数组解析失败: fileName={}", fileName, e);
             throw BizException.of(ErrorCode.PARSE_FAILED);

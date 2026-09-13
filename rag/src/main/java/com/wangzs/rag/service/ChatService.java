@@ -1,5 +1,6 @@
 package com.wangzs.rag.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.model.dto.ChatRequest;
@@ -18,6 +19,7 @@ import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * RAG 对话服务（核心对话逻辑）
@@ -33,10 +35,21 @@ public class ChatService {
     private final ConfigService configService;
     private final ChatSessionService chatSessionService;
     private final ChatMessageService chatMessageService;
+    private final ObjectMapper objectMapper;
 
     private String getSystemPrompt() {
         return configService.getString("rag.chat.system-prompt",
-                "你是一个智能助手，请基于提供的参考文档回答用户问题。如果参考文档中没有相关信息，请诚实告知用户。");
+                "你是一个专业的知识库助手，你的任务是根据提供的参考文档片段回答用户问题。\n\n" +
+                "回答要求：\n" +
+                "1. **基于事实**：仅使用参考文档中的信息回答，不要编造内容\n" +
+                "2. **自然流畅**：用口语化的中文表达，避免机械式复述\n" +
+                "3. **结构化输出**：\n" +
+                "   - 使用清晰的段落分隔\n" +
+                "   - 可以用 Markdown 格式（**加粗**、列表、引用等）增强可读性\n" +
+                "   - 必要时使用 `> 引用` 格式突出关键信息\n" +
+                "4. **准确引用**：如果参考文档包含具体数据、条款或定义，请准确引用\n" +
+                "5. **坦诚说明**：如果参考文档中没有相关信息，直接说\"根据提供的文档，我没有找到相关信息\"，不要猜测或扩展\n" +
+                "6. **主动总结**：回答结尾可以简要总结要点（如果内容较长）");
     }
 
     private int getTopK() {
@@ -111,7 +124,9 @@ public class ChatService {
         // TODO【RAG 调试用】向量库空结果保护
         if (searchResults.isEmpty()) {
             log.warn("向量检索无结果，跳过 LLM 流式调用: kbId={}, question={}", kbId, request.getQuestion());
-            return Flux.just("未在知识库中找到相关内容，请检查：\n1. 文档是否已上传并解析完成\n2. 向量化是否成功\n3. 相似度阈值是否过高（当前默认阈值：0.7）\n\n（调试提示：kbId=" + kbId + "，检索返回 0 条结果）");
+            // 返回错误信息 + sessionId标记
+            String errorMsg = "未在知识库中找到相关内容，请检查：\n1. 文档是否已上传并解析完成\n2. 向量化是否成功\n3. 相似度阈值是否过高（当前默认阈值：0.7）\n\n（调试提示：kbId=" + kbId + "，检索返回 0 条结果）";
+            return Flux.just(errorMsg + "\n\n[SESSION_ID:" + sessionId + "]\n\n[DONE]");
         }
 
         String context = buildContext(searchResults);
@@ -119,26 +134,47 @@ public class ChatService {
 
         ChatClient chatClient = chatClientBuilder.build();
 
-        return chatClient.prompt()
-                .messages(messages.toArray(new Message[0]))
-                .stream()
-                .chatResponse()
-                .concatMap(response -> {
-                    String content = response.getResult().getOutput().getText();
-                    return Flux.just(content);
-                })
-                .doOnComplete(() -> {
-                    // 流结束后保存对话记录（简化处理）
-                    String fullAnswer = "流式回复（请查看前端完整内容）";
-                    chatMessageService.saveMessages(sessionId, request.getQuestion(), fullAnswer, searchResults);
-                })
-                .doOnError(e -> log.error("流式对话出错", e));
+        // 使用 AtomicReference 收集完整回复
+        java.util.concurrent.atomic.AtomicReference<String> fullAnswer = new java.util.concurrent.atomic.AtomicReference<>("");
+
+        // 构建参考文档数据并发送
+        String refChunksData = buildRefChunksJson(searchResults);
+
+        return Flux.concat(
+                // 1. 首先发送参考文档数据（如果有）
+                refChunksData != null ? Flux.just("[REF_CHUNKS:" + refChunksData + "]") : Flux.empty(),
+                // 2. 发送 LLM 流式内容
+                chatClient.prompt()
+                        .messages(messages.toArray(new Message[0]))
+                        .stream()
+                        .content()
+                        .map(chunk -> {
+                            // 收集完整内容
+                            fullAnswer.updateAndGet(current -> current + chunk);
+                            // 返回文本块
+                            return chunk;
+                        })
+                        .doOnComplete(() -> {
+                            // 3. 流结束后保存对话记录
+                            try {
+                                chatMessageService.saveMessages(sessionId, request.getQuestion(),
+                                        fullAnswer.get(), searchResults);
+                                log.info("流式对话消息已保存: sessionId={}, answerLength={}", sessionId, fullAnswer.get().length());
+                            } catch (Exception e) {
+                                log.error("流式对话消息保存失败: sessionId={}", sessionId, e);
+                            }
+                        }),
+                // 4. 发送 sessionId 标记
+                Flux.just("\n\n[SESSION_ID:" + sessionId + "]"),
+                // 5. 发送 DONE 事件
+                Flux.just("[DONE]")
+        );
     }
 
     /**
-     * 确保会话存在
+     * 确保会话存在（供Controller调用以获取sessionId）
      */
-    private String ensureSession(String sessionId, Long kbId) {
+    public String ensureSession(String sessionId, Long kbId) {
         if (sessionId == null || sessionId.isBlank()) {
             // 新会话：从 Sa-Token 获取用户 ID
             Object loginId = cn.dev33.satoken.stp.StpUtil.getLoginId();
@@ -235,5 +271,33 @@ public class ChatService {
         }
 
         return response;
+    }
+
+    /**
+     * 构建参考文档 JSON 数据（用于流式响应）
+     */
+    private String buildRefChunksJson(List<RetrievalService.SearchResult> results) {
+        if (results == null || results.isEmpty()) {
+            return null;
+        }
+
+        // 转换为 ChatResponse.ReferenceDoc 列表
+        List<ChatResponse.ReferenceDoc> refs = results.stream()
+                .map(r -> {
+                    ChatResponse.ReferenceDoc ref = new ChatResponse.ReferenceDoc();
+                    ref.setDocId(r.docId());
+                    ref.setFileName(r.fileName());
+                    ref.setContent(r.content());
+                    ref.setScore(r.score());
+                    return ref;
+                })
+                .toList();
+
+        try {
+            return objectMapper.writeValueAsString(refs);
+        } catch (Exception e) {
+            log.error("序列化参考文档失败", e);
+            return null;
+        }
     }
 }

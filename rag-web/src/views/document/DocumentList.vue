@@ -312,7 +312,8 @@ const showChunks = async (row: DocType) => {
   chunkDialogVisible.value = true
   chunkPreview.value = '正在加载分块数据...'
   try {
-    const chunks = await documentApi.getChunks(row.id)
+    const res = await documentApi.getChunks(row.id)
+    const chunks = res.data
     if (chunks && chunks.length > 0) {
       chunkPreview.value = chunks
         .map((c: any) => `【分块 ${c.index + 1}】长度: ${c.length}\n${c.content}`)

@@ -34,3 +34,5 @@ build/
 
 node_modules
 rag-uploads
+tmp
+samples

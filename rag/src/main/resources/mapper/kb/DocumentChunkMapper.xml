@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wangzs.rag.mapper.DocumentChunkMapper">
+
+    <resultMap id="BaseResultMap" type="com.wangzs.rag.model.entity.DocumentChunk">
+        <id property="id" column="id"/>
+        <result property="docId" column="doc_id"/>
+        <result property="kbId" column="kb_id"/>
+        <result property="chunkIndex" column="chunk_index"/>
+        <result property="title" column="title"/>
+        <result property="sectionPath" column="section_path"/>
+        <result property="content" column="content"/>
+        <result property="tokenCount" column="token_count"/>
+        <result property="charLength" column="char_length"/>
+        <result property="embeddingText" column="embedding_text"/>
+        <result property="version" column="version"/>
+        <result property="createdTime" column="created_time"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, doc_id, kb_id, chunk_index, title, section_path, content,
+        token_count, char_length, embedding_text, version, created_time
+    </sql>
+
+    <select id="selectByDocId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_document_chunk
+        WHERE doc_id = #{docId}
+        ORDER BY chunk_index ASC
+    </select>
+
+    <select id="selectByDocIdAndVersion" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_document_chunk
+        WHERE doc_id = #{docId}
+          AND version = #{version}
+        ORDER BY chunk_index ASC
+    </select>
+
+    <delete id="deleteByDocId">
+        DELETE FROM kb_document_chunk
+        WHERE doc_id = #{docId}
+    </delete>
+
+    <delete id="deleteByDocIdAndVersion">
+        DELETE FROM kb_document_chunk
+        WHERE doc_id = #{docId}
+          AND version = #{version}
+    </delete>
+
+</mapper>

@@ -83,7 +83,13 @@ public class DocumentController {
 
         try (InputStream inputStream = fileStorageService.getInputStream(doc.getFilePath())) {
             List<Chunk> chunks = fileParseService.parseAndChunk(
-                    inputStream, doc.getFileName(), doc.getFileType(), ""
+                    inputStream,
+                    doc.getFileName(),
+                    doc.getFileType(),
+                    "",
+                    doc.getId(),
+                    doc.getKbId(),
+                    doc.getTitle()
             );
             List<ChunkVO> result = chunks.stream()
                     .map(c -> ChunkVO.builder()
@@ -299,12 +305,9 @@ public class DocumentController {
     public ApiResult<Void> retryParse(@PathVariable Long id) {
         Document doc = verifyDocumentOwnership(id);
 
-        // 重置状态为待解析
-        documentService.updateParseStatus(id, ParseStatusEnum.INIT, 0, null);
-        documentService.updateVectorStatus(id, VectorStatusEnum.INIT, 0, null);
+        // 调用 stage-aware 重试（根据失败阶段决定重置范围）
+        documentService.retryParse(id);
 
-        // 重新发送 MQ 消息
-        documentService.sendParseMessage(doc);
         log.info("手动重试解析: docId={}, fileName={}", id, doc.getFileName());
         return ApiResult.success(null, "已重新发起解析");
     }

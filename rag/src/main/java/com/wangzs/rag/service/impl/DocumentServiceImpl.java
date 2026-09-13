@@ -15,6 +15,7 @@ import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.model.entity.KnowledgeBase;
 import com.wangzs.rag.service.DocumentService;
 import com.wangzs.rag.service.EmbeddingService;
+import com.wangzs.rag.service.DocumentChunkService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.SendCallback;
@@ -43,6 +44,8 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
     private final UploadRecordMapper uploadRecordMapper;
     private final RocketMQTemplate rocketMQTemplate;
     private final EmbeddingService embeddingService;
+    private final com.wangzs.rag.util.RedisUtil redisUtil;
+    private final DocumentChunkService chunkService;
 
     @Value("${rag.rocketmq.topic}")
     private String parseTopic;
@@ -119,26 +122,49 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
     public void retryParse(Long id) {
         Document doc = getById(id);
 
+        // 清除旧版本去重键，避免残留的 dedup key 阻塞新消息的幂等链路
+        int oldVersion = doc.getVersion() == null ? 0 : doc.getVersion();
+        String oldDedupKey = "rag:msg:dedup:" + id + ":" + oldVersion;
+        redisUtil.delete(oldDedupKey);
+
         // 清理旧向量（避免重试后残留历史向量）
         embeddingService.deleteVectorsByDocId(id);
 
-        int newVersion = (doc.getVersion() == null ? 0 : doc.getVersion()) + 1;
+        // 判断失败阶段，决定重置范围
+        boolean parseFailed = doc.getParseStatus() == ParseStatusEnum.FAILED;
+        boolean vectorFailed = doc.getVectorStatus() == VectorStatusEnum.FAILED;
 
-        // 局部更新，重置状态并递增版本号
-        Document updateDoc = new Document();
-        updateDoc.setId(id);
-        updateDoc.setVersion(newVersion);
-        updateDoc.setParseStatus(ParseStatusEnum.INIT);  // 重置为待解析
-        updateDoc.setVectorStatus(VectorStatusEnum.INIT); // 重置为待向量化
-        updateDoc.setErrorMsg("");     // 清空历史报错
-        baseMapper.updateById(updateDoc);
+        if (parseFailed) {
+            // 解析失败：全量重置，删除旧分块，version+1
+            int newVersion = oldVersion + 1;
+            chunkService.deleteByDocId(id);
 
-        doc.setVersion(newVersion);
+            Document updateDoc = new Document();
+            updateDoc.setId(id);
+            updateDoc.setVersion(newVersion);
+            updateDoc.setParseStatus(ParseStatusEnum.INIT);
+            updateDoc.setVectorStatus(VectorStatusEnum.INIT);
+            updateDoc.setErrorMsg("");
+            updateDoc.setChunkCount(0);
+            updateDoc.setVectorCount(0);
+            baseMapper.updateById(updateDoc);
 
-        // 事务提交后再发送 MQ
-        executeAfterTransactionCommit(() -> sendParseMessage(doc));
+            doc.setVersion(newVersion);
+            executeAfterTransactionCommit(() -> sendParseMessage(doc));
+            log.info("手动重试（解析失败）: id={}, newVersion={}", id, newVersion);
 
-        log.info("触发重新解析文档: id={}, newVersion={}", id, newVersion);
+        } else if (vectorFailed) {
+            // 向量化失败：只重置向量化阶段，保留分块和 version
+            Document updateDoc = new Document();
+            updateDoc.setId(id);
+            updateDoc.setVectorStatus(VectorStatusEnum.INIT);
+            updateDoc.setErrorMsg("");
+            // parseStatus 保持 SUCCESS，chunkCount 保持原值，version 不递增
+            baseMapper.updateById(updateDoc);
+
+            executeAfterTransactionCommit(() -> sendParseMessage(doc));
+            log.info("手动重试（向量化失败）: id={}, version={}", id, oldVersion);
+        }
     }
 
     @Override
@@ -261,10 +287,12 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
 
         // 清理已入库的向量
         embeddingService.deleteVectorsByDocId(id);
+        // 清理分块数据
+        chunkService.deleteByDocId(id);
 
         doc.setDeleted(1);
         baseMapper.updateById(doc);
-        log.info("删除文档: id={}", id);
+        log.info("删除文档及关联数据: id={}", id);
     }
 
     @Override

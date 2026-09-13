@@ -42,6 +42,7 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
     private final FileParseService fileParseService;
     private final EmbeddingService embeddingService;
     private final DocumentService documentService;
+    private final com.wangzs.rag.service.DocumentChunkService chunkService;
     private final S3Client s3Client;
     private final ConfigService configService;
     private final RedisUtil redisUtil;
@@ -107,23 +108,49 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
         }
 
         boolean parseSuccess = false;
+        int chunkCount = 0;
 
         try {
             // ---------------- 阶段一：解析与分块 ----------------
-            documentService.updateParseStatus(docId, ParseStatusEnum.PARSING, 0, null); // 1-解析中
-
             List<Chunk> chunks;
-            // 流式读取文件（输入流），防止大文件压爆 JVM 堆内存
-            try (InputStream inputStream = getFileInputStream(doc.getFilePath())) {
-                chunks = fileParseService.parseAndChunk(
-                        inputStream, doc.getFileName(), doc.getFileType(), ""
-                );
-            }
 
-            int chunkCount = chunks.size();
-            documentService.updateParseStatus(docId, ParseStatusEnum.SUCCESS, chunkCount, null); // 2-解析成功
-            parseSuccess = true;
-            log.info("文档解析成功: docId={}, chunks={}", docId, chunkCount);
+            if (doc.getParseStatus() == ParseStatusEnum.SUCCESS) {
+                // 重试场景：分块已完成，从 DB 加载分块，跳过文件解析
+                log.info("分块已存在，跳过解析阶段，从 DB 加载: docId={}", docId);
+                chunks = chunkService.findChunksByDocId(docId);
+                if (chunks.isEmpty()) {
+                    throw new IllegalStateException("分块数据缺失：parseStatus=SUCCESS 但 chunk 表无数据");
+                }
+                chunkCount = chunks.size();
+                parseSuccess = true;
+
+            } else {
+                // 正常流程：重新解析文件
+                documentService.updateParseStatus(docId, ParseStatusEnum.PARSING, 0, null); // 1-解析中
+
+                // 流式读取文件（输入流），防止大文件压爆 JVM 堆内存
+                try (InputStream inputStream = getFileInputStream(doc.getFilePath())) {
+                    chunks = fileParseService.parseAndChunk(
+                            inputStream,
+                            doc.getFileName(),
+                            doc.getFileType(),
+                            "",
+                            doc.getId(),
+                            doc.getKbId(),
+                            doc.getTitle()
+                    );
+                }
+
+                chunkCount = chunks.size();
+                documentService.updateParseStatus(docId, ParseStatusEnum.SUCCESS, chunkCount, null); // 2-解析成功
+                parseSuccess = true;
+                log.info("文档解析成功: docId={}, chunks={}", docId, chunkCount);
+
+                // 持久化分块（向量化前的恢复点）
+                if (!chunks.isEmpty()) {
+                    chunkService.saveChunks(docId, doc.getKbId(), doc.getVersion(), chunks);
+                }
+            }
 
             // ---------------- 阶段二：向量化与入库 ----------------
             if (!chunks.isEmpty()) {
@@ -144,10 +171,14 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
             if (!parseSuccess) {
                 documentService.updateParseStatus(docId, ParseStatusEnum.FAILED, 0, "解析阶段失败: " + safeError);
             } else {
-                // 向量化失败：清理已写入 PGVector 的向量，保证数据一致
+                // 向量化失败：清理已写入 PGVector 的向量，保留已解析的分块数
                 embeddingService.deleteVectorsByDocId(docId);
-                documentService.updateVectorStatus(docId, VectorStatusEnum.FAILED, 0, "向量化阶段失败: " + safeError);
+                documentService.updateVectorStatus(docId, VectorStatusEnum.FAILED,
+                        chunkCount, "向量化阶段失败: " + safeError);
             }
+        } finally {
+            // 处理完成后清理去重键，避免残留阻塞后续重试
+            redisUtil.delete(dedupKey);
         }
     }
 

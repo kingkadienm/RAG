@@ -45,7 +45,7 @@ public class EmbeddingService {
             return 0;
         }
 
-        int batchSize = Math.max(1, configService.getInt("rag.embedding.batch-size", 50));
+        int batchSize = Math.max(1, configService.getInt("rag.embedding.batch-size", 25));
         long delayMs = configService.getLong("rag.embedding.batch-delay-ms", 200);
 
         int totalSaved = 0;
@@ -90,7 +90,7 @@ public class EmbeddingService {
             float[] embedding = embeddings.get(i);
             vectorDocs.add(new org.springframework.ai.document.Document(
                     buildContent(chunk, doc),
-                    buildMetadata(doc, chunk, embedding)
+                    buildMetadata(doc, chunk)
             ));
         }
 
@@ -121,16 +121,24 @@ public class EmbeddingService {
 
     /**
      * 构建元数据
+     * <p>Spring AI PGVector 自动保存 embedding，无需手动传入</p>
      */
-    private Map<String, Object> buildMetadata(Document doc, Chunk chunk, float[] embedding) {
+    private Map<String, Object> buildMetadata(Document doc, Chunk chunk) {
         Map<String, Object> metadata = new HashMap<>();
+        // ========== 溯源定位 ==========
         metadata.put("doc_id", doc.getId());
         metadata.put("kb_id", doc.getKbId());
         metadata.put("chunk_index", chunk.getIndex());
+        metadata.put("chunk_total", doc.getChunkCount());
+        // ========== 展示信息 ==========
+        metadata.put("title", doc.getTitle());
         metadata.put("file_name", doc.getFileName());
         metadata.put("file_type", doc.getFileType());
+        // ========== 版本控制（重建向量/缓存失效关键） ==========
+        metadata.put("version", doc.getVersion());
+        // ========== 权限与审计 ==========
         metadata.put("creator_id", doc.getCreatorId());
-        // Spring AI PGVector 会自动保存 embedding
+        metadata.put("created_time", doc.getCreatedTime());
         return metadata;
     }
 }

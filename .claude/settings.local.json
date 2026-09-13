@@ -8,7 +8,9 @@
       "Bash(mvn dependency:tree)",
       "Bash(mvn dependency:tree -pl common)",
       "Bash(mvn compile *)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

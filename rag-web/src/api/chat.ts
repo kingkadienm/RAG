@@ -1,87 +1,143 @@
 import request from '@/utils/axios'
-import type { ChatRequest, ChatResponse, ChatSessionVO } from '@/types'
-import { useAuthStore } from '@/stores/auth'
+import type {ChatRequest, ChatResponse, ChatSessionVO, ChatStreamResult} from '@/types'
+import {useAuthStore} from '@/stores/auth'
 
 export const chatApi = {
-  chat(data: ChatRequest) {
-    return request.post<ChatResponse>('/chat/completions', data)
-  },
+    chat(data: ChatRequest) {
+        return request.post<ChatResponse>('/chat/completions', data)
+    },
 
-  /**
-   * 流式 SSE 对话
-   * 使用原生 fetch 以支持 ReadableStream，不经过 axios 拦截器
-   * SSE 格式：data: <content>\n\n
-   * @param onChunk 实时接收到文本块时的回调（用于前端逐字显示）
-   */
-  async chatStream(data: ChatRequest, onChunk?: (chunk: string) => void): Promise<string> {
-    const authStore = useAuthStore()
-    const token = authStore.token
+    async chatStream(
+        data: ChatRequest,
+        onChunk?: (chunk: string) => void
+    ): Promise<ChatStreamResult> {
+        const authStore = useAuthStore()
+        const token = authStore.token
 
-    const response = await fetch('/api/chat/completions/stream', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(data),
-    })
+        const response = await fetch('/api/chat/completions/stream', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'text/event-stream',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(data),
+        })
 
-    if (!response.ok) {
-      const text = await response.text()
-      throw new Error(text || `HTTP ${response.status}`)
-    }
+        if (!response.ok) {
+            const text = await response.text()
+            throw new Error(text || `HTTP ${response.status}`)
+        }
 
-    const reader = response.body?.getReader()
-    if (!reader) {
-      throw new Error('浏览器不支持 ReadableStream')
-    }
+        if (!response.body) {
+            throw new Error('浏览器不支持 ReadableStream')
+        }
 
-    const decoder = new TextDecoder()
-    let fullContent = ''
-    let buffer = ''
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder('utf-8')
 
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
+        let buffer = ''
+        let fullContent = ''
+        let sessionId = data.sessionId || ''
+        let refChunksData: any = null
 
-      buffer += decoder.decode(value, { stream: true })
+        const processEvent = (event: string) => {
+            const lines = event.split(/\r?\n/)
 
-      // 按 SSE 格式解析：data: <content>\n\n
-      const lines = buffer.split('\n')
-      // 保留最后一个可能不完整的行
-      buffer = lines.pop() || ''
+            const dataLines: string[] = []
 
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed || !trimmed.startsWith('data: ')) continue
-        const content = trimmed.slice(6) // 去掉 "data: " 前缀
-        // 忽略 SSE 错误事件
-        if (content.includes('"error"')) continue
-        fullContent += content
-        onChunk?.(content)
-      }
-    }
+            for (const line of lines) {
+                if (line.startsWith('data:')) {
+                    // 只去掉 data:，不要 trim 正文
+                    let content = line.slice(5)
 
-    // 处理 buffer 中剩余的最后一行
-    const lastLine = buffer.trim()
-    if (lastLine.startsWith('data: ') && !lastLine.includes('"error"')) {
-      const content = lastLine.slice(6)
-      fullContent += content
-      onChunk?.(content)
-    }
+                    // SSE 规范允许 data: 后面跟一个空格
+                    if (content.startsWith(' ')) {
+                        content = content.slice(1)
+                    }
 
-    return fullContent
-  },
+                    dataLines.push(content)
+                }
+            }
 
-  getSessions() {
-    return request.get<ChatSessionVO[]>('/chat/sessions')
-  },
+            if (dataLines.length === 0) {
+                return
+            }
 
-  getMessages(sessionId: string) {
-    return request.get(`/chat/sessions/${sessionId}/messages`)
-  },
+            const content = dataLines.join('\n')
 
-  deleteSession(sessionId: string) {
-    return request.delete(`/chat/sessions/${sessionId}`)
-  },
+            // 检查是否是参考文档数据
+            const refChunksMatch = content.match(/^\[REF_CHUNKS:(.+)\]$/)
+            if (refChunksMatch) {
+                // 提取参考文档 JSON 数据
+                try {
+                    refChunksData = JSON.parse(refChunksMatch[1])
+                } catch (e) {
+                    console.error('[Chat] 解析参考文档数据失败:', e)
+                }
+                return
+            }
+
+            if (content === '[DONE]') {
+                return
+            }
+
+            const sessionMatch = content.match(
+                /^\[SESSION_ID:([^\]]+)\]$/
+            )
+
+            if (sessionMatch) {
+                sessionId = sessionMatch[1]
+                return
+            }
+
+            fullContent += content
+            onChunk?.(content)
+        }
+
+        while (true) {
+            const { done, value } = await reader.read()
+
+            if (done) {
+                break
+            }
+
+            buffer += decoder.decode(value, { stream: true })
+
+            // SSE event 之间使用空行分隔
+            const events = buffer.split(/\r?\n\r?\n/)
+
+            // 最后一段可能是不完整的 event
+            buffer = events.pop() || ''
+
+            for (const event of events) {
+                processEvent(event)
+            }
+        }
+
+        // 处理 decoder 剩余内容
+        buffer += decoder.decode()
+
+        if (buffer.trim()) {
+            processEvent(buffer)
+        }
+
+        return {
+            content: fullContent,
+            sessionId,
+            refChunks: refChunksData
+        }
+    },
+
+    getSessions() {
+        return request.get<ChatSessionVO[]>('/chat/sessions')
+    },
+
+    getMessages(sessionId: string) {
+        return request.get(`/chat/sessions/${sessionId}/messages`)
+    },
+
+    deleteSession(sessionId: string) {
+        return request.delete(`/chat/sessions/${sessionId}`)
+    },
 }

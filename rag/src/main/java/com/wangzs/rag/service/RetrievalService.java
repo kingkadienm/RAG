@@ -35,7 +35,7 @@ public class RetrievalService {
      * @return 检索到的文档片段
      */
     public List<SearchResult> search(String queryText, int topK, List<Long> kbIds) {
-        double similarityThreshold = configService.getDouble("rag.retrieval.similarity-threshold", 0.7);
+        double similarityThreshold = configService.getDouble("rag.retrieval.similarity-threshold", 0.6);
 
         if (queryText == null || queryText.isBlank()) {
             return List.of();
@@ -43,18 +43,26 @@ public class RetrievalService {
 
         SearchRequest.Builder builder = SearchRequest.builder()
                 .query(queryText)
-                .topK(topK);
-//                .similarityThreshold(similarityThreshold);
+                .topK(topK)
+                .similarityThreshold(similarityThreshold);
 
-        // 将 kb_id 过滤下推到 PGVector SQL 层，避免内存过滤导致 topK 被耗尽
+        // 关键修复：将List转换为数组
         if (kbIds != null && !kbIds.isEmpty()) {
             FilterExpressionBuilder filterBuilder = new FilterExpressionBuilder();
-            builder.filterExpression(filterBuilder.in("kb_id", kbIds).build());
+
+            // 单元素和多元素分别处理
+            if (kbIds.size() == 1) {
+                builder.filterExpression(filterBuilder.eq("kb_id", kbIds.get(0)).build());
+            } else {
+                // 转换为Object数组，让FilterExpressionBuilder正确解析
+                builder.filterExpression(
+                        filterBuilder.in("kb_id", kbIds.toArray()).build()
+                );
+            }
         }
 
         SearchRequest request = builder.build();
         List<Document> results = vectorStore.similaritySearch(request);
-
         log.info("向量检索完成: query={}, results={}", queryText, results.size());
         return results.stream()
                 .map(SearchResult::from)
@@ -68,16 +76,21 @@ public class RetrievalService {
             Long docId,
             Long kbId,
             Integer chunkIndex,
+            Integer chunkTotal,
+            String title,
             String fileName,
             String content,
             Double score
     ) {
         public static SearchResult from(Document doc) {
             Map<String, Object> metadata = doc.getMetadata();
+
             return new SearchResult(
-                    metadata != null ? (Long) metadata.get("doc_id") : null,
-                    metadata != null ? (Long) metadata.get("kb_id") : null,
+                    metadata != null ? ((Number) metadata.get("doc_id")).longValue() : null,
+                    metadata != null ? ((Number) metadata.get("kb_id")).longValue() : null,
                     metadata != null ? ((Number) metadata.get("chunk_index")).intValue() : 0,
+                    metadata != null ? ((Number) metadata.get("chunk_total")).intValue() : 0,
+                    metadata != null ? (String) metadata.get("title") : null,
                     metadata != null ? (String) metadata.get("file_name") : null,
                     doc.getText(),
                     doc.getScore()
