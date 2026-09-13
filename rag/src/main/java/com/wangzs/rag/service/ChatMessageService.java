@@ -3,6 +3,8 @@ package com.wangzs.rag.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.wangzs.rag.enums.ChatRoleEnum;
+import com.wangzs.rag.enums.DeletedEnum;
 import com.wangzs.rag.model.entity.ChatMessage;
 import com.wangzs.rag.model.entity.ChatSession;
 import com.wangzs.rag.mapper.ChatMessageMapper;
@@ -71,7 +73,7 @@ public class ChatMessageService {
         // 保存用户消息
         ChatMessage userMsg = new ChatMessage();
         userMsg.setSessionId(sessionId);
-        userMsg.setRole(1); // 用户
+        userMsg.setRole(ChatRoleEnum.USER);
         userMsg.setContent(question);
         userMsg.setTokenCount(questionTokens);
         userMsg.setCreatedTime(now);
@@ -80,7 +82,7 @@ public class ChatMessageService {
         // 保存助手回复
         ChatMessage assistantMsg = new ChatMessage();
         assistantMsg.setSessionId(sessionId);
-        assistantMsg.setRole(2); // 助手
+        assistantMsg.setRole(ChatRoleEnum.ASSISTANT);
         assistantMsg.setContent(answer);
         assistantMsg.setRefChunks(refChunksJson);
         assistantMsg.setTokenCount(answerTokens);
@@ -110,7 +112,7 @@ public class ChatMessageService {
         ChatSession session = chatSessionMapper.selectOne(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatSession>()
                         .eq(ChatSession::getSessionId, sessionId)
-                        .eq(ChatSession::getDeleted, 0)
+                        .eq(ChatSession::getDeleted, DeletedEnum.NO)
         );
         if (session == null) {
             throw new com.wangzs.rag.common.exception.BizException(

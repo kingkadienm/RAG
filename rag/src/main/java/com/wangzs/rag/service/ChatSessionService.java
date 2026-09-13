@@ -1,5 +1,7 @@
 package com.wangzs.rag.service;
 
+import com.wangzs.rag.enums.DeletedEnum;
+import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.model.entity.ChatSession;
 import com.wangzs.rag.mapper.ChatSessionMapper;
 import com.wangzs.rag.mapper.ChatMessageMapper;
@@ -38,7 +40,7 @@ public class ChatSessionService {
         session.setKbId(kbId);
         session.setTitle(title != null && !title.isEmpty() ? title : "新对话");
         session.setMessageCount(0);
-        session.setDeleted(0);
+        session.setDeleted(DeletedEnum.NO);
         session.setCreatedTime(LocalDateTime.now());
         session.setUpdatedTime(LocalDateTime.now());
         chatSessionMapper.insert(session);
@@ -57,7 +59,7 @@ public class ChatSessionService {
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatSession>()
                         .eq(ChatSession::getUserId, userId)
                         .eq(kbId != null, ChatSession::getKbId, kbId)
-                        .eq(ChatSession::getDeleted, 0)
+                        .eq(ChatSession::getDeleted, DeletedEnum.NO)
                         .orderByDesc(ChatSession::getUpdatedTime)
         );
     }
@@ -70,7 +72,7 @@ public class ChatSessionService {
         ChatSession session = chatSessionMapper.selectOne(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatSession>()
                         .eq(ChatSession::getSessionId, sessionId)
-                        .eq(ChatSession::getDeleted, 0)
+                        .eq(ChatSession::getDeleted, DeletedEnum.NO)
         );
         if (session == null) {
             throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
@@ -78,7 +80,7 @@ public class ChatSessionService {
         if (!userId.equals(session.getUserId())) {
             throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
         }
-        session.setDeleted(1);
+        session.setDeleted(DeletedEnum.YES);
         session.setUpdatedTime(LocalDateTime.now());
         chatSessionMapper.updateById(session);
         // 删除消息（物理删除，跟随会话生命周期）
@@ -107,14 +109,18 @@ public class ChatSessionService {
         return chatSessionMapper.selectOne(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatSession>()
                         .eq(ChatSession::getSessionId, sessionId)
-                        .eq(ChatSession::getDeleted, 0)
+                        .eq(ChatSession::getDeleted, DeletedEnum.NO)
         );
     }
 
     /**
-     * 校验会话归属（不要求 userId，仅校验存在性）
+     * 校验会话归属（非归属用户抛出 NOT_FOUND）
      */
-    public boolean verifySessionOwnership(String sessionId) {
-        return getSession(sessionId) != null;
+    public ChatSession verifySessionOwnership(String sessionId) {
+        ChatSession session = getSession(sessionId);
+        if (session == null || !AuthUtil.getLoginUserId().equals(session.getUserId())) {
+            throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
+        }
+        return session;
     }
 }

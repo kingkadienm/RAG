@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.mapper.ConfigMapper;
+import com.wangzs.rag.enums.DeletedEnum;
+import com.wangzs.rag.enums.SystemConfigFlagEnum;
 import com.wangzs.rag.model.entity.Config;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -70,7 +72,7 @@ public class ConfigService {
      */
     public synchronized void refreshCache() {
         List<Config> all = configMapper.selectList(
-                new LambdaQueryWrapper<Config>().eq(Config::getDeleted, 0)
+                new LambdaQueryWrapper<Config>().eq(Config::getDeleted, DeletedEnum.NO)
         );
         Map<String, Config> newCache = new ConcurrentHashMap<>();
         for (Config c : all) {
@@ -94,6 +96,13 @@ public class ConfigService {
     public String getString(String key, String defaultValue) {
         Config c = cache.get(key);
         return (c != null) ? c.getConfigValue() : defaultValue;
+    }
+
+    /**
+     * 根据 key 查询 Config 实体（从缓存读取）
+     */
+    public Config getByKey(String key) {
+        return cache.get(key);
     }
 
     public int getInt(String key) {
@@ -162,7 +171,7 @@ public class ConfigService {
         Config config = configMapper.selectOne(
                 new LambdaQueryWrapper<Config>()
                         .eq(Config::getConfigKey, key)
-                        .eq(Config::getDeleted, 0)
+                        .eq(Config::getDeleted, DeletedEnum.NO)
         );
         if (config == null) {
             throw BizException.of(ErrorCode.CONFIG_NOT_FOUND);
@@ -192,10 +201,10 @@ public class ConfigService {
         if (config == null) {
             throw BizException.of(ErrorCode.CONFIG_NOT_FOUND);
         }
-        if (config.getIsSystem() == 1) {
+        if (config.getIsSystem() == SystemConfigFlagEnum.YES) {
             throw BizException.of(ErrorCode.CONFIG_SYSTEM_PROTECTED);
         }
-        config.setDeleted(1);
+        config.setDeleted(DeletedEnum.YES);
         configMapper.updateById(config);
         cache.remove(config.getConfigKey()); // 写当前缓存引用
         log.info("配置已删除: id={}, key={}", id, config.getConfigKey());
@@ -208,14 +217,14 @@ public class ConfigService {
     public List<Config> listAll() {
         return configMapper.selectList(
                 new LambdaQueryWrapper<Config>()
-                        .eq(Config::getDeleted, 0)
+                        .eq(Config::getDeleted, DeletedEnum.NO)
                         .orderByAsc(Config::getId)
         );
     }
 
     public Config getById(Long id) {
         Config config = configMapper.selectById(id);
-        if (config == null || config.getDeleted() == 1) {
+        if (config == null || config.getDeleted() == DeletedEnum.YES) {
             throw BizException.of(ErrorCode.CONFIG_NOT_FOUND);
         }
         return config;

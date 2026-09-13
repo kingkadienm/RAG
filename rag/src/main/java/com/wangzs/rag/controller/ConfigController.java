@@ -42,10 +42,7 @@ public class ConfigController {
     @Operation(summary = "按 key 查询配置")
     @GetMapping("/{key}")
     public ApiResult<Config> getByKey(@PathVariable String key) {
-        Config config = configService.listAll().stream()
-                .filter(c -> c.getConfigKey().equals(key))
-                .findFirst()
-                .orElse(null);
+        Config config = configService.getByKey(key);
         if (config == null) {
             throw BizException.of(400, "配置项不存在: " + key);
         }

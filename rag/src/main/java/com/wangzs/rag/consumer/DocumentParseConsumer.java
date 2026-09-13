@@ -5,6 +5,8 @@ import com.wangzs.rag.enums.ParseStatusEnum;
 import com.wangzs.rag.enums.VectorStatusEnum;
 import com.wangzs.rag.model.dto.DocumentParseMsgDTO;
 import com.wangzs.rag.model.entity.Document;
+import com.wangzs.rag.model.vector.VectorDocumentChunk;
+import com.wangzs.rag.repository.VectorDocumentChunkRepository;
 
 import com.wangzs.rag.service.ConfigService;
 import com.wangzs.rag.service.DocumentService;
@@ -42,7 +44,7 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
     private final FileParseService fileParseService;
     private final EmbeddingService embeddingService;
     private final DocumentService documentService;
-    private final com.wangzs.rag.service.DocumentChunkService chunkService;
+    private final VectorDocumentChunkRepository vectorDocumentChunkRepository;
     private final S3Client s3Client;
     private final ConfigService configService;
     private final RedisUtil redisUtil;
@@ -115,9 +117,9 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
             List<Chunk> chunks;
 
             if (doc.getParseStatus() == ParseStatusEnum.SUCCESS) {
-                // 重试场景：分块已完成，从 DB 加载分块，跳过文件解析
-                log.info("分块已存在，跳过解析阶段，从 DB 加载: docId={}", docId);
-                chunks = chunkService.findChunksByDocId(docId);
+                // 重试场景：分块已完成，从 PostgreSQL 加载分块，跳过文件解析
+                log.info("分块已存在，跳过解析阶段，从 PostgreSQL 加载: docId={}", docId);
+                chunks = toChunks(vectorDocumentChunkRepository.findByDocId(docId));
                 if (chunks.isEmpty()) {
                     throw new IllegalStateException("分块数据缺失：parseStatus=SUCCESS 但 chunk 表无数据");
                 }
@@ -146,9 +148,10 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
                 parseSuccess = true;
                 log.info("文档解析成功: docId={}, chunks={}", docId, chunkCount);
 
-                // 持久化分块（向量化前的恢复点）
+                // 持久化分块到 PostgreSQL（向量化前的恢复点）
                 if (!chunks.isEmpty()) {
-                    chunkService.saveChunks(docId, doc.getKbId(), doc.getVersion(), chunks);
+                    vectorDocumentChunkRepository.saveBatch(
+                            docId, doc.getKbId(), doc.getVersion(), chunkCount, chunks);
                 }
             }
 
@@ -200,5 +203,44 @@ public class DocumentParseConsumer implements RocketMQListener<DocumentParseMsgD
     private String truncateErrorMsg(String msg) {
         if (msg == null) return "未知错误";
         return msg.length() > 500 ? msg.substring(0, 500) + "..." : msg;
+    }
+
+    /**
+     * VectorDocumentChunk 列表转换为业务 Chunk 列表
+     */
+    private List<Chunk> toChunks(List<VectorDocumentChunk> entities) {
+        if (entities == null || entities.isEmpty()) {
+            return List.of();
+        }
+        return entities.stream()
+                .map(e -> Chunk.builder()
+                        .index(e.getChunkIndex())
+                        .content(e.getContent())
+                        .length(extractInt(e.getMetadata(), "char_length"))
+                        .documentId(e.getDocId())
+                        .kbId(e.getKbId())
+                        .title(extractString(e.getMetadata(), "title"))
+                        .sectionPath(extractString(e.getMetadata(), "section_path"))
+                        .tokenCount(extractInt(e.getMetadata(), "token_count"))
+                        .embeddingText(extractString(e.getMetadata(), "embedding_text"))
+                        .build())
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String extractString(java.util.Map<String, Object> metadata, String key) {
+        if (metadata == null || key == null) return null;
+        Object value = metadata.get(key);
+        return value != null ? value.toString() : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static int extractInt(java.util.Map<String, Object> metadata, String key) {
+        if (metadata == null || key == null) return 0;
+        Object value = metadata.get(key);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return 0;
     }
 }

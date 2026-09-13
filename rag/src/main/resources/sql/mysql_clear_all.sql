@@ -49,7 +49,10 @@ TRUNCATE TABLE kb_upload_record;
 -- 3.4 清空文档表（子表，依赖 kb_knowledge_base）
 TRUNCATE TABLE kb_document;
 
--- 3.5 清空知识库表（父表）
+-- 3.5 文档分块表已迁移到 PostgreSQL，不再需要
+-- TRUNCATE TABLE kb_document_chunk;
+
+-- 3.6 清空知识库表（父表）
 TRUNCATE TABLE kb_knowledge_base;
 
 

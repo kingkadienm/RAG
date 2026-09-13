@@ -1,5 +1,6 @@
 package com.wangzs.rag.model.entity;
 
+import com.wangzs.rag.enums.DeletedEnum;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
@@ -59,5 +60,5 @@ public class ChatSession {
      * 逻辑删除：0-未删除 1-已删除
      */
     @TableLogic
-    private Integer deleted;
+    private DeletedEnum deleted;
 }

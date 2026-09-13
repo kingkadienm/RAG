@@ -1,5 +1,7 @@
 package com.wangzs.rag.model.entity;
 
+import com.wangzs.rag.enums.DeletedEnum;
+import com.wangzs.rag.enums.KnowledgeBaseStatusEnum;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
@@ -36,7 +38,7 @@ public class KnowledgeBase {
     /**
      * 状态：1-启用 2-禁用（删除统一走 deleted，避免双重软删除）
      */
-    private Integer status;
+    private KnowledgeBaseStatusEnum status;
 
     /**
      * 创建时间
@@ -54,5 +56,5 @@ public class KnowledgeBase {
      * 逻辑删除：0-未删除 1-已删除
      */
     @TableLogic
-    private Integer deleted;
+    private DeletedEnum deleted;
 }

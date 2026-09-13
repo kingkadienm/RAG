@@ -1,5 +1,7 @@
 package com.wangzs.rag.model.entity;
 
+import com.wangzs.rag.enums.DeletedEnum;
+import com.wangzs.rag.enums.SystemConfigFlagEnum;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
@@ -38,7 +40,7 @@ public class Config {
     /**
      * 是否系统配置（1=不可删除）
      */
-    private Integer isSystem;
+    private SystemConfigFlagEnum isSystem;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
@@ -47,5 +49,5 @@ public class Config {
     private LocalDateTime updatedTime;
 
     @TableLogic
-    private Integer deleted;
+    private DeletedEnum deleted;
 }

@@ -5,6 +5,8 @@ import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.model.dto.ChatRequest;
 import com.wangzs.rag.model.dto.ChatResponse;
+import com.wangzs.rag.enums.ChatRoleEnum;
+import com.wangzs.rag.enums.DeletedEnum;
 import com.wangzs.rag.model.entity.ChatMessage;
 import com.wangzs.rag.util.RedisUtil;
 import com.wangzs.rag.model.entity.ChatSession;
@@ -186,13 +188,15 @@ public class ChatService {
             session.setKbId(kbId);
             session.setTitle("新对话");
             session.setMessageCount(0);
-            session.setDeleted(0);
+            session.setDeleted(DeletedEnum.NO);
             chatSessionService.createSessionDirect(session);
             return session.getSessionId();
         }
 
         // 验证会话是否存在
-        if (!chatSessionService.verifySessionOwnership(sessionId)) {
+        try {
+            chatSessionService.verifySessionOwnership(sessionId);
+        } catch (BizException e) {
             return ensureSession(null, kbId); // 创建新会话
         }
 
@@ -232,9 +236,9 @@ public class ChatService {
         if (history != null) {
             for (ChatMessage msg : history) {
                 // role=1 用户, role=2 助手, role=3 系统
-                if (msg.getRole() == 1) {
+                if (msg.getRole() == ChatRoleEnum.USER) {
                     messages.add(new UserMessage(msg.getContent()));
-                } else if (msg.getRole() == 2) {
+                } else if (msg.getRole() == ChatRoleEnum.ASSISTANT) {
                     messages.add(new org.springframework.ai.chat.messages.AssistantMessage(msg.getContent()));
                 }
                 // role=3 系统消息跳过（已由当前系统提示词覆盖）

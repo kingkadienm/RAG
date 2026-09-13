@@ -1,10 +1,12 @@
 package com.wangzs.rag.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.wangzs.rag.enums.DeletedEnum;
 import com.wangzs.rag.enums.ParseStatusEnum;
 import com.wangzs.rag.enums.VectorStatusEnum;
 import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.mapper.DocumentMapper;
+import com.wangzs.rag.repository.VectorDocumentChunkRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,7 +38,7 @@ public class DocumentRetryScheduler {
     private final ConfigService configService;
     private final RocketMQTemplate rocketMQTemplate;
     private final ObjectMapper objectMapper;
-    private final com.wangzs.rag.service.DocumentChunkService chunkService;
+    private final VectorDocumentChunkRepository vectorDocumentChunkRepository;
 
 
     /**
@@ -48,7 +50,7 @@ public class DocumentRetryScheduler {
 
         // 查询解析失败（parseStatus=3）或向量化失败（vectorStatus=3）的文档
         LambdaQueryWrapper<Document> wrapper = new LambdaQueryWrapper<Document>()
-                .eq(Document::getDeleted, 0)
+                .eq(Document::getDeleted, DeletedEnum.NO)
                 .and(q -> q
                         .eq(Document::getParseStatus, 3)
                         .or()
@@ -78,8 +80,8 @@ public class DocumentRetryScheduler {
             boolean vectorFailed = doc.getVectorStatus() == com.wangzs.rag.enums.VectorStatusEnum.FAILED;
 
             if (parseFailed) {
-                // 解析失败：全量重置 + 清理分块
-                chunkService.deleteByDocId(doc.getId());
+                // 解析失败：全量重置 + 清理 PostgreSQL 分块
+                vectorDocumentChunkRepository.deleteByDocId(doc.getId());
                 documentService.updateParseStatus(doc.getId(), ParseStatusEnum.INIT, 0, null);
                 documentService.updateVectorStatus(doc.getId(), VectorStatusEnum.INIT, 0, null);
                 documentService.incrementRetryCount(doc.getId());
@@ -102,7 +104,7 @@ public class DocumentRetryScheduler {
     @Scheduled(fixedRate = 300000L)
     public void retryStuckDocuments() {
         LambdaQueryWrapper<Document> wrapper = new LambdaQueryWrapper<Document>()
-                .eq(Document::getDeleted, 0)
+                .eq(Document::getDeleted, DeletedEnum.NO)
                 .eq(Document::getParseStatus, 1);
 
         List<Document> stuckDocs = documentMapper.selectList(wrapper);

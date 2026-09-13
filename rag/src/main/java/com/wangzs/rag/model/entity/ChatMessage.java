@@ -1,5 +1,6 @@
 package com.wangzs.rag.model.entity;
 
+import com.wangzs.rag.enums.ChatRoleEnum;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
@@ -26,7 +27,7 @@ public class ChatMessage {
     /**
      * 角色：1-用户 2-助手 3-系统
      */
-    private Integer role;
+    private ChatRoleEnum role;
 
     /**
      * 消息内容

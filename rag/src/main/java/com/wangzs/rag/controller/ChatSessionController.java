@@ -1,10 +1,7 @@
 package com.wangzs.rag.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
-import com.wangzs.rag.common.exception.BizException;
-import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
-import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.model.entity.ChatMessage;
 import com.wangzs.rag.model.entity.ChatSession;
 import com.wangzs.rag.service.ChatSessionService;
@@ -18,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * 对话会话管理 Controller
+ * 对话会话管理 Controller（纯编排层，无业务逻辑）
  */
 @Tag(name = "对话会话管理", description = "会话列表查询、消息查询、会话删除")
 @RestController
@@ -31,27 +28,13 @@ public class ChatSessionController {
     private final ChatSessionService chatSessionService;
     private final ChatMessageService chatMessageService;
 
-    /** 校验会话归属：返回会话实体，非归属用户抛出 NOT_FOUND */
-    private ChatSession verifySessionOwnership(String sessionId) {
-        ChatSession session = chatSessionService.getSession(sessionId);
-        if (session == null) {
-            throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
-        }
-        if (!AuthUtil.getLoginUserId().equals(session.getUserId())) {
-            throw BizException.of(ErrorCode.CHAT_SESSION_NOT_FOUND);
-        }
-        return session;
-    }
-
     /**
      * 查询当前用户的会话列表
-     *
-     * @param kbId 可选，按知识库 ID 过滤
      */
     @Operation(summary = "查询会话列表")
     @GetMapping
     public ApiResult<List<ChatSession>> list(@RequestParam(name = "kbId", required = false) Long kbId) {
-        Long userId = AuthUtil.getLoginUserId();
+        Long userId = com.wangzs.rag.common.util.AuthUtil.getLoginUserId();
         List<ChatSession> sessions = chatSessionService.listSessions(userId, kbId);
         return ApiResult.success(sessions);
     }
@@ -62,19 +45,20 @@ public class ChatSessionController {
     @Operation(summary = "查询会话消息")
     @GetMapping("/{sessionId}/messages")
     public ApiResult<List<ChatMessage>> getMessages(@PathVariable String sessionId) {
-        verifySessionOwnership(sessionId);
+        chatSessionService.verifySessionOwnership(sessionId);
         List<ChatMessage> messages = chatMessageService.listMessages(sessionId);
         return ApiResult.success(messages);
     }
 
     /**
-     * 删除会话（逻辑删除）
+     * 删除会话（软删除）
      */
     @Operation(summary = "删除会话")
     @DeleteMapping("/{sessionId}")
     public ApiResult<Void> delete(@PathVariable String sessionId) {
-        verifySessionOwnership(sessionId);
-        chatSessionService.deleteSession(AuthUtil.getLoginUserId(), sessionId);
+        chatSessionService.verifySessionOwnership(sessionId);
+        chatSessionService.deleteSession(
+                com.wangzs.rag.common.util.AuthUtil.getLoginUserId(), sessionId);
         return ApiResult.success(null, "删除成功");
     }
 }

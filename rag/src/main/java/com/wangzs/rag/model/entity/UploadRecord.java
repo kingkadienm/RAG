@@ -1,5 +1,7 @@
 package com.wangzs.rag.model.entity;
 
+import com.wangzs.rag.enums.CheckStatusEnum;
+import com.wangzs.rag.enums.DeletedEnum;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
@@ -61,7 +63,7 @@ public class UploadRecord {
     /**
      * 校验状态：1-通过 2-拒绝
      */
-    private Integer checkStatus;
+    private CheckStatusEnum checkStatus;
 
     /**
      * 拒绝原因
@@ -83,5 +85,5 @@ public class UploadRecord {
      * 逻辑删除：0-未删除 1-已删除
      */
     @TableLogic
-    private Integer deleted;
+    private DeletedEnum deleted;
 }

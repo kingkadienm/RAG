@@ -1,6 +1,7 @@
 package com.wangzs.rag.model.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.wangzs.rag.enums.DeletedEnum;
 import com.wangzs.rag.enums.ParseStatusEnum;
 import com.wangzs.rag.enums.VectorStatusEnum;
 import lombok.Data;
@@ -120,5 +121,5 @@ public class Document {
      * 逻辑删除：0-未删除 1-已删除
      */
     @TableLogic
-    private Integer deleted;
+    private DeletedEnum deleted;
 }

@@ -1,5 +1,8 @@
 package com.wangzs.rag.model.entity;
 
+import com.wangzs.rag.enums.DeletedEnum;
+import com.wangzs.rag.enums.UserRoleEnum;
+import com.wangzs.rag.enums.UserStatusEnum;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
@@ -36,12 +39,12 @@ public class User {
     /**
      * 角色：1-管理员 2-普通用户
      */
-    private Integer role;
+    private UserRoleEnum role;
 
     /**
      * 状态：1-正常 2-禁用
      */
-    private Integer status;
+    private UserStatusEnum status;
 
     /**
      * 创建时间
@@ -59,5 +62,5 @@ public class User {
      * 逻辑删除：0-未删除 1-已删除
      */
     @TableLogic
-    private Integer deleted;
+    private DeletedEnum deleted;
 }

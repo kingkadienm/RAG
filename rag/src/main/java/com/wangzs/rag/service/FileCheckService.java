@@ -2,8 +2,10 @@ package com.wangzs.rag.service;
 
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
-import com.wangzs.rag.model.entity.UploadRecord;
+import com.wangzs.rag.enums.CheckStatusEnum;
+import com.wangzs.rag.enums.DeletedEnum;
 import com.wangzs.rag.mapper.UploadRecordMapper;
+import com.wangzs.rag.model.entity.UploadRecord;
 import com.wangzs.rag.util.FileUtil;
 import com.wangzs.rag.util.MD5Util;
 import lombok.RequiredArgsConstructor;
@@ -115,11 +117,11 @@ public class FileCheckService {
         record.setFileMd5(md5);
         record.setMimeType(mimeType);
         record.setStorageType(storageType);
-        record.setCheckStatus(1); // 通过
+        record.setCheckStatus(CheckStatusEnum.PASSED); // 通过
         record.setKbId(kbId);
         record.setUploaderId(uploaderId);
         record.setCreatedTime(LocalDateTime.now());
-        record.setDeleted(0); // 未删除
+        record.setDeleted(DeletedEnum.NO); // 未删除
         return record;
     }
 }

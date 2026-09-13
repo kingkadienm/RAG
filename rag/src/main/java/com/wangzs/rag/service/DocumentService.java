@@ -10,6 +10,8 @@ import com.wangzs.rag.enums.VectorStatusEnum;
 import com.wangzs.rag.mapper.DocumentMapper;
 import com.wangzs.rag.mapper.KnowledgeBaseMapper;
 import com.wangzs.rag.model.dto.DocumentParseMsgDTO;
+import com.wangzs.rag.chunk.Chunk;
+import com.wangzs.rag.chunk.Chunk;
 import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.model.entity.KnowledgeBase;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,8 @@ import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -29,6 +33,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 文档服务接口
@@ -102,4 +107,24 @@ public interface DocumentService extends IService<Document> {
      * 递增文档重试次数
      */
     void incrementRetryCount(Long id);
+
+    /**
+     * 获取文档解析进度（状态机映射结果）
+     */
+    Map<String, Object> getParseProgress(Long id);
+
+    /**
+     * 查询文档分块内容（读取文件实时分块）
+     */
+    List<Chunk> getChunks(Long id);
+
+    /**
+     * 删除文档（含物理文件清理）
+     */
+    void deleteWithFile(Long id);
+
+    /**
+     * SSE 流式推送解析状态
+     */
+    void streamParseStatus(Long id, SseEmitter emitter);
 }

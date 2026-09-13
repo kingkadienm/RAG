@@ -4,6 +4,9 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
+import com.wangzs.rag.enums.DeletedEnum;
+import com.wangzs.rag.enums.UserRoleEnum;
+import com.wangzs.rag.enums.UserStatusEnum;
 import com.wangzs.rag.mapper.UserMapper;
 import com.wangzs.rag.model.dto.LoginRequest;
 import com.wangzs.rag.model.dto.RegisterRequest;
@@ -32,11 +35,11 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public Map<String, Object> login(LoginRequest request) {
         User user = userMapper.selectByUsername(request.getUsername());
-        if (user == null || user.getDeleted() == 1) {
+        if (user == null || user.getDeleted() == DeletedEnum.YES) {
             throw BizException.of(ErrorCode.USER_NOT_FOUND);
         }
 
-        if (user.getStatus() == 2) {
+        if (user.getStatus() == UserStatusEnum.DISABLED) {
             throw BizException.of(ErrorCode.USER_DISABLED);
         }
 
@@ -63,7 +66,7 @@ public class AuthServiceImpl implements AuthService {
         User exist = userMapper.selectOne(
                 new LambdaQueryWrapper<User>()
                         .eq(User::getUsername, request.getUsername())
-                        .eq(User::getDeleted, 0)
+                        .eq(User::getDeleted, DeletedEnum.NO)
         );
         if (exist != null) {
             throw BizException.of(ErrorCode.USER_ALREADY_EXISTS);
@@ -73,9 +76,9 @@ public class AuthServiceImpl implements AuthService {
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setNickname(request.getNickname());
-        user.setRole(2); // 普通用户
-        user.setStatus(1);
-        user.setDeleted(0);
+        user.setRole(UserRoleEnum.USER);
+        user.setStatus(UserStatusEnum.NORMAL);
+        user.setDeleted(DeletedEnum.NO);
 
         userMapper.insert(user);
         log.info("用户注册成功: userId={}, username={}", user.getId(), user.getUsername());
@@ -85,7 +88,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public User getCurrentUser(Long userId) {
         User user = userMapper.selectById(userId);
-        if (user == null || user.getDeleted() == 1) {
+        if (user == null || user.getDeleted() == DeletedEnum.YES) {
             throw BizException.of(ErrorCode.USER_NOT_FOUND);
         }
         return user;

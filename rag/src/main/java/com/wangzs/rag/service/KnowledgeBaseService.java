@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
+import com.wangzs.rag.enums.DeletedEnum;
+import com.wangzs.rag.enums.KnowledgeBaseStatusEnum;
+import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.model.entity.KnowledgeBase;
 import com.wangzs.rag.model.entity.UploadRecord;
@@ -43,7 +46,7 @@ public class KnowledgeBaseService {
         long count = knowledgeBaseMapper.selectCount(
                 new LambdaQueryWrapper<KnowledgeBase>()
                         .eq(KnowledgeBase::getName, name)
-                        .eq(KnowledgeBase::getDeleted, 0)
+                        .eq(KnowledgeBase::getDeleted, DeletedEnum.NO)
         );
         if (count > 0) {
             throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NAME_EXISTS);
@@ -53,8 +56,8 @@ public class KnowledgeBaseService {
         kb.setName(name);
         kb.setDescription(description);
         kb.setCreatorId(creatorId);
-        kb.setStatus(1); // 启用
-        kb.setDeleted(0);
+        kb.setStatus(KnowledgeBaseStatusEnum.ENABLED); // 启用
+        kb.setDeleted(DeletedEnum.NO);
 
         knowledgeBaseMapper.insert(kb);
         log.info("创建知识库成功: id={}, name={}", kb.getId(), name);
@@ -66,7 +69,18 @@ public class KnowledgeBaseService {
      */
     public KnowledgeBase getById(Long id) {
         KnowledgeBase kb = knowledgeBaseMapper.selectById(id);
-        if (kb == null || kb.getDeleted() == 1) {
+        if (kb == null || kb.getDeleted() == DeletedEnum.YES) {
+            throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
+        }
+        return kb;
+    }
+
+    /**
+     * 校验知识库归属（非归属用户抛出 NOT_FOUND）
+     */
+    public KnowledgeBase verifyOwnership(Long id) {
+        KnowledgeBase kb = getById(id);
+        if (!AuthUtil.getLoginUserId().equals(kb.getCreatorId())) {
             throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
         }
         return kb;
@@ -78,7 +92,7 @@ public class KnowledgeBaseService {
     public Page<KnowledgeBase> page(Long creatorId, int pageNum, int pageSize) {
         Page<KnowledgeBase> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<KnowledgeBase>()
-                .eq(KnowledgeBase::getDeleted, 0)
+                .eq(KnowledgeBase::getDeleted, DeletedEnum.NO)
                 .eq(creatorId != null, KnowledgeBase::getCreatorId, creatorId)
                 .orderByDesc(KnowledgeBase::getCreatedTime);
 
@@ -94,7 +108,7 @@ public class KnowledgeBaseService {
         return knowledgeBaseMapper.selectList(
                 new LambdaQueryWrapper<KnowledgeBase>()
                         .eq(KnowledgeBase::getCreatorId, userId)
-                        .eq(KnowledgeBase::getDeleted, 0)
+                        .eq(KnowledgeBase::getDeleted, DeletedEnum.NO)
                         .orderByDesc(KnowledgeBase::getCreatedTime)
         );
     }
@@ -111,7 +125,7 @@ public class KnowledgeBaseService {
             long count = knowledgeBaseMapper.selectCount(
                     new LambdaQueryWrapper<KnowledgeBase>()
                             .eq(KnowledgeBase::getName, name)
-                            .eq(KnowledgeBase::getDeleted, 0)
+                            .eq(KnowledgeBase::getDeleted, DeletedEnum.NO)
                             .ne(KnowledgeBase::getId, id)
             );
             if (count > 0) {
@@ -136,7 +150,7 @@ public class KnowledgeBaseService {
         List<Document> docs = documentMapper.selectList(
                 new LambdaQueryWrapper<Document>()
                         .eq(Document::getKbId, id)
-                        .eq(Document::getDeleted, 0)
+                        .eq(Document::getDeleted, DeletedEnum.NO)
         );
 
         // 2. 批量删除 PGVector 向量（按 doc_id 过滤）
@@ -166,7 +180,7 @@ public class KnowledgeBaseService {
                 }
             }
             // 逻辑删除文档
-            doc.setDeleted(1);
+            doc.setDeleted(DeletedEnum.YES);
             documentMapper.updateById(doc);
         }
 
@@ -175,12 +189,12 @@ public class KnowledgeBaseService {
                 null,
                 new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<com.wangzs.rag.model.entity.UploadRecord>()
                         .eq(com.wangzs.rag.model.entity.UploadRecord::getKbId, id)
-                        .set(com.wangzs.rag.model.entity.UploadRecord::getDeleted, 1)
+                        .set(com.wangzs.rag.model.entity.UploadRecord::getDeleted, DeletedEnum.YES)
         );
 
         // 5. 标记知识库为已删除
-        kb.setDeleted(1);
-        kb.setStatus(3); // 已删除
+        kb.setDeleted(DeletedEnum.YES);
+        kb.setStatus(KnowledgeBaseStatusEnum.DELETED); // 已删除
         knowledgeBaseMapper.updateById(kb);
         log.info("删除知识库完成: id={}, docsCount={}", id, docs.size());
     }
@@ -189,7 +203,7 @@ public class KnowledgeBaseService {
      * 启用/禁用知识库
      */
     @Transactional(rollbackFor = Exception.class)
-    public void updateStatus(Long id, Integer status) {
+    public void updateStatus(Long id, KnowledgeBaseStatusEnum status) {
         KnowledgeBase kb = getById(id);
         kb.setStatus(status);
         knowledgeBaseMapper.updateById(kb);

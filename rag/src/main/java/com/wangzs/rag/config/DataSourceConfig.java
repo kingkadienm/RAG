@@ -128,10 +128,12 @@ public class DataSourceConfig {
     @Bean(name = "pgVectorDataSource")
     @ConfigurationProperties(prefix = "app.datasource.pgvector")
     public DataSource pgVectorDataSource() {
-        return DataSourceBuilder
+        HikariDataSource ds = DataSourceBuilder
                 .create()
                 .type(HikariDataSource.class)
                 .build();
+        ds.setSchema("rag");
+        return ds;
     }
 
     /**
