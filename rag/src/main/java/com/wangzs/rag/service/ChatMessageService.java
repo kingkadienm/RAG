@@ -31,6 +31,7 @@ public class ChatMessageService {
     private final ChatMessageMapper chatMessageMapper;
     private final RedisUtil redisUtil;
     private final ObjectMapper objectMapper; // Jackson JSON 序列化
+    private final ConfigService configService;
 
     /**
      * 保存对话消息（用户提问 + 助手回复）
@@ -96,12 +97,20 @@ public class ChatMessageService {
                         .setSql("message_count = message_count + 2")
                         .set(ChatSession::getUpdatedTime, now));
 
-        // 缓存最近消息到 Redis
+        // 滑动窗口：将新消息追加到现有上下文列表，超出窗口大小时从头部裁剪
         String redisKey = "chat:ctx:" + sessionId;
-        List<ChatMessage> ctx = new ArrayList<>();
-        ctx.add(userMsg);
-        ctx.add(assistantMsg);
-        redisUtil.set(redisKey, ctx, 1800); // 30 分钟
+        @SuppressWarnings("unchecked")
+        List<ChatMessage> existing = redisUtil.getObject(redisKey, List.class);
+        if (existing == null) {
+            existing = new ArrayList<>();
+        }
+        existing.add(userMsg);
+        existing.add(assistantMsg);
+        int windowSize = configService.getInt("rag.chat.context-window-size", 10);
+        if (existing.size() > windowSize) {
+            existing = new ArrayList<>(existing.subList(existing.size() - windowSize, existing.size()));
+        }
+        redisUtil.set(redisKey, existing, 1800); // 30 分钟，TTL 每次写入时重置
     }
 
     /**

@@ -16,6 +16,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -71,19 +72,6 @@ public class ChatService {
         List<RetrievalService.SearchResult> searchResults = retrievalService.search(
                 request.getQuestion(), getTopK(), request.getKbIds());
 
-        // TODO【RAG 调试用】向量库空结果保护
-        // 检索结果为空时，暂时不让大模型自动搜索回复
-        // 此时直接返回提示，方便排查：向量未入库 / 切片未入库 / PGVector 表为空 / 相似度阈值过高等问题
-        // 后续确认向量正常后，删除此 guard 即可恢复自动 RAG
-        if (searchResults.isEmpty()) {
-            log.warn("向量检索无结果，跳过 LLM 调用: kbId={}, question={}", kbId, request.getQuestion());
-            ChatResponse response = new ChatResponse();
-            response.setSessionId(sessionId);
-            response.setAnswer("未在知识库中找到相关内容，请检查：\n1. 文档是否已上传并解析完成\n2. 向量化是否成功（查看文档的向量化状态）\n3. 相似度阈值是否过高（当前默认阈值：0.7）\n\n（调试提示：kbId=" + kbId + "，检索返回 0 条结果）");
-            response.setReferences(List.of());
-            return response;
-        }
-
         // 3. 构建 Prompt
         String context = buildContext(searchResults);
         List<Message> messages = buildMessages(request.getQuestion(), context, sessionId);
@@ -115,21 +103,13 @@ public class ChatService {
     /**
      * RAG 对话（流式 SSE）
      */
-    public Flux<String> chatStream(ChatRequest request) {
+    public Flux<ServerSentEvent<String>> chatStream(ChatRequest request) {
         Long kbId = request.getKbIds() != null && !request.getKbIds().isEmpty()
                 ? request.getKbIds().get(0) : null;
         String sessionId = ensureSession(request.getSessionId(), kbId);
 
         List<RetrievalService.SearchResult> searchResults = retrievalService.search(
                 request.getQuestion(), getTopK(), request.getKbIds());
-
-        // TODO【RAG 调试用】向量库空结果保护
-        if (searchResults.isEmpty()) {
-            log.warn("向量检索无结果，跳过 LLM 流式调用: kbId={}, question={}", kbId, request.getQuestion());
-            // 返回错误信息 + sessionId标记
-            String errorMsg = "未在知识库中找到相关内容，请检查：\n1. 文档是否已上传并解析完成\n2. 向量化是否成功\n3. 相似度阈值是否过高（当前默认阈值：0.7）\n\n（调试提示：kbId=" + kbId + "，检索返回 0 条结果）";
-            return Flux.just(errorMsg + "\n\n[SESSION_ID:" + sessionId + "]\n\n[DONE]");
-        }
 
         String context = buildContext(searchResults);
         List<Message> messages = buildMessages(request.getQuestion(), context, sessionId);
@@ -144,7 +124,7 @@ public class ChatService {
 
         return Flux.concat(
                 // 1. 首先发送参考文档数据（如果有）
-                refChunksData != null ? Flux.just("[REF_CHUNKS:" + refChunksData + "]") : Flux.empty(),
+                refChunksData != null ? Flux.just(sse("ref_chunks", refChunksData)) : Flux.empty(),
                 // 2. 发送 LLM 流式内容
                 chatClient.prompt()
                         .messages(messages.toArray(new Message[0]))
@@ -153,8 +133,8 @@ public class ChatService {
                         .map(chunk -> {
                             // 收集完整内容
                             fullAnswer.updateAndGet(current -> current + chunk);
-                            // 返回文本块
-                            return chunk;
+                            // 返回 SSE message 事件
+                            return sse("message", chunk);
                         })
                         .doOnComplete(() -> {
                             // 3. 流结束后保存对话记录
@@ -166,11 +146,21 @@ public class ChatService {
                                 log.error("流式对话消息保存失败: sessionId={}", sessionId, e);
                             }
                         }),
-                // 4. 发送 sessionId 标记
-                Flux.just("\n\n[SESSION_ID:" + sessionId + "]"),
-                // 5. 发送 DONE 事件
-                Flux.just("[DONE]")
+                // 4. 发送 session_id 事件
+                Flux.just(sse("session_id", sessionId)),
+                // 5. 发送 done 事件
+                Flux.just(sse("done", ""))
         );
+    }
+
+    /**
+     * 构建 ServerSentEvent
+     */
+    private ServerSentEvent<String> sse(String eventName, String data) {
+        return ServerSentEvent.<String>builder()
+                .event(eventName)
+                .data(data)
+                .build();
     }
 
     /**

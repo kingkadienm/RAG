@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
@@ -32,8 +34,8 @@ public class ChatController {
     }
 
     @Operation(summary = "RAG 对话（流式 SSE）")
-    @PostMapping(value = "/completions/stream", produces = "text/event-stream")
-    public Flux<String> completionsStream(@Valid @RequestBody ChatRequest request) {
+    @PostMapping(value = "/completions/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> completionsStream(@Valid @RequestBody ChatRequest request) {
         // 确保会话存在，让ChatService内部处理sessionId
         return chatService.chatStream(request);
     }

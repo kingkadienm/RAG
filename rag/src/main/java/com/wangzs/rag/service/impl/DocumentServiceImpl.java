@@ -26,10 +26,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.SendCallback;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -37,6 +37,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 文档服务实现类（标准 MyBatis-Plus 风格）
@@ -54,6 +57,10 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
     private final FileStorageService fileStorageService;
     private final com.wangzs.rag.util.RedisUtil redisUtil;
     private final VectorDocumentChunkRepository vectorDocumentChunkRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    @Qualifier("sseStatusExecutor")
+    private ScheduledExecutorService sseStatusExecutor;
 
     @Value("${rag.rocketmq.topic}")
     private String parseTopic;
@@ -432,11 +439,7 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
 
     @Override
     public void streamParseStatus(Long id, org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter) {
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
-        scheduler.setPoolSize(1);
-        scheduler.initialize();
-
-        scheduler.scheduleAtFixedRate(() -> {
+        Runnable task = () -> {
             try {
                 Document currentDoc = getById(id);
                 if (currentDoc == null) {
@@ -452,17 +455,17 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
                 String stage = (String) progressData.get("stage");
                 if ("completed".equals(stage) || "parse_failed".equals(stage) || "vector_failed".equals(stage)) {
                     emitter.complete();
-                    scheduler.shutdown();
                 }
             } catch (Exception e) {
                 log.debug("SSE 流结束或发送失败: docId={}", id, e);
                 emitter.complete();
-                scheduler.shutdown();
             }
-        }, 1000);
+        };
 
-        emitter.onCompletion(() -> scheduler.shutdown());
-        emitter.onError((e) -> scheduler.shutdown());
-        emitter.onTimeout(() -> scheduler.shutdown());
+        ScheduledFuture<?> future = sseStatusExecutor.scheduleAtFixedRate(task, 0, 1, TimeUnit.SECONDS);
+
+        emitter.onCompletion(() -> future.cancel(false));
+        emitter.onError(e -> future.cancel(false));
+        emitter.onTimeout(() -> future.cancel(false));
     }
 }

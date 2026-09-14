@@ -1,0 +1,10 @@
+# ==================== Prod Profile: Silent Logging ====================
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+logging:
+  level:
+    root: INFO
+    org.springframework.ai: INFO
+    org.springframework.jdbc: INFO

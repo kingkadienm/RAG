@@ -8,7 +8,6 @@ import com.wangzs.rag.mapper.DocumentMapper;
 import com.wangzs.rag.service.ConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Service;
@@ -17,7 +16,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * 向量化服务
@@ -28,7 +26,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EmbeddingService {
 
-    private final EmbeddingModel embeddingModel;
     private final VectorStore vectorStore;
     private final DocumentMapper documentMapper;
     private final ConfigService configService;
@@ -76,24 +73,23 @@ public class EmbeddingService {
 
     /**
      * 单批次向量化（embedding + 入库）
+     * <p>
+     * Spring AI 1.1.2 的 {@link org.springframework.ai.document.Document} 不暴露 embedding 字段，
+     * PgVectorStore.doAdd() 内部统一调用 EmbeddingModel 进行向量化。
+     * 因此本方法直接构建 Document 并交给 vectorStore.add()，
+     * 由向量库负责唯一一次的 embedding 调用，避免重复计算。(Req 9)
+     * </p>
      */
     private int embedBatch(Document doc, List<Chunk> batch) {
-        List<String> contents = batch.stream()
-                .map(Chunk::getContent)
-                .collect(Collectors.toList());
-
-        List<float[]> embeddings = embeddingModel.embed(contents);
-
-        List<org.springframework.ai.document.Document> vectorDocs = new ArrayList<>();
-        for (int i = 0; i < batch.size(); i++) {
-            Chunk chunk = batch.get(i);
-            float[] embedding = embeddings.get(i);
+        List<org.springframework.ai.document.Document> vectorDocs = new ArrayList<>(batch.size());
+        for (Chunk chunk : batch) {
             vectorDocs.add(new org.springframework.ai.document.Document(
                     buildContent(chunk, doc),
                     buildMetadata(doc, chunk)
             ));
         }
 
+        // vectorStore.add() calls the embedding model exactly once for this batch (Req 9)
         vectorStore.add(vectorDocs);
         return batch.size();
     }

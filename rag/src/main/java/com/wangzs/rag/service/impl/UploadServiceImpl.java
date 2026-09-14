@@ -2,6 +2,7 @@ package com.wangzs.rag.service.impl;
 
 import com.wangzs.rag.common.exception.BizException;
 import com.wangzs.rag.common.exception.ErrorCode;
+import com.wangzs.rag.common.util.AuthUtil;
 import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.service.*;
 import com.wangzs.rag.service.file.FileUploadVO;
@@ -64,10 +65,11 @@ public class UploadServiceImpl implements UploadService {
         Document doc;
         try {
             String storageType = configService.getString("file.storage.type", "local");
+            Long creatorId = AuthUtil.getLoginUserId();
             doc = documentService.createWithUploadRecord(
                     kbId, originalFilename, originalFilename,
                     extension, file.getSize(), storedFileName, md5,
-                    0L, storedFileName, mimeType, storageType
+                    creatorId, storedFileName, mimeType, storageType
             );
         } catch (Exception e) {
             // DB 创建失败，清理已上传的文件

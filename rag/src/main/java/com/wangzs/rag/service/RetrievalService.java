@@ -64,9 +64,14 @@ public class RetrievalService {
         SearchRequest request = builder.build();
         List<Document> results = vectorStore.similaritySearch(request);
         log.info("向量检索完成: query={}, results={}", queryText, results.size());
-        return results.stream()
-                .map(SearchResult::from)
-                .toList();
+        try {
+            return results.stream()
+                    .map(SearchResult::from)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("SearchResult construction failed: {}", e.getMessage(), e);
+            return List.of();
+        }
     }
 
     /**
@@ -86,15 +91,33 @@ public class RetrievalService {
             Map<String, Object> metadata = doc.getMetadata();
 
             return new SearchResult(
-                    metadata != null ? ((Number) metadata.get("doc_id")).longValue() : null,
-                    metadata != null ? ((Number) metadata.get("kb_id")).longValue() : null,
-                    metadata != null ? ((Number) metadata.get("chunk_index")).intValue() : 0,
-                    metadata != null ? ((Number) metadata.get("chunk_total")).intValue() : 0,
-                    metadata != null ? (String) metadata.get("title") : null,
-                    metadata != null ? (String) metadata.get("file_name") : null,
+                    getLong(metadata, "doc_id"),
+                    getLong(metadata, "kb_id"),
+                    getInt(metadata, "chunk_index"),
+                    getInt(metadata, "chunk_total"),
+                    getString(metadata, "title"),
+                    getString(metadata, "file_name"),
                     doc.getText(),
                     doc.getScore()
             );
+        }
+
+        private static Long getLong(Map<String, Object> m, String key) {
+            if (m == null) return null;
+            Object v = m.get(key);
+            return v instanceof Number n ? n.longValue() : null;
+        }
+
+        private static Integer getInt(Map<String, Object> m, String key) {
+            if (m == null) return null;
+            Object v = m.get(key);
+            return v instanceof Number n ? n.intValue() : null;
+        }
+
+        private static String getString(Map<String, Object> m, String key) {
+            if (m == null) return null;
+            Object v = m.get(key);
+            return v instanceof String s ? s : null;
         }
     }
 }

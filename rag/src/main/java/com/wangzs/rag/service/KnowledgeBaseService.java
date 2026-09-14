@@ -7,12 +7,15 @@ import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.enums.DeletedEnum;
 import com.wangzs.rag.enums.KnowledgeBaseStatusEnum;
 import com.wangzs.rag.common.util.AuthUtil;
+import com.wangzs.rag.enums.UserRoleEnum;
 import com.wangzs.rag.model.entity.Document;
 import com.wangzs.rag.model.entity.KnowledgeBase;
 import com.wangzs.rag.model.entity.UploadRecord;
+import com.wangzs.rag.model.entity.User;
 import com.wangzs.rag.mapper.DocumentMapper;
 import com.wangzs.rag.mapper.KnowledgeBaseMapper;
 import com.wangzs.rag.mapper.UploadRecordMapper;
+import com.wangzs.rag.mapper.UserMapper;
 import com.wangzs.rag.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +39,7 @@ public class KnowledgeBaseService {
     private final UploadRecordMapper uploadRecordMapper;
     private final FileStorageService fileStorageService;
     private final VectorStore vectorStore;
+    private final UserMapper userMapper;
 
     /**
      * 创建知识库
@@ -77,10 +81,19 @@ public class KnowledgeBaseService {
 
     /**
      * 校验知识库归属（非归属用户抛出 NOT_FOUND）
+     * 管理员角色跳过归属校验，直接放行
      */
     public KnowledgeBase verifyOwnership(Long id) {
         KnowledgeBase kb = getById(id);
-        if (!AuthUtil.getLoginUserId().equals(kb.getCreatorId())) {
+        Long currentUserId = AuthUtil.getLoginUserId();
+
+        // Admin bypass: role == ADMIN may access any knowledge base
+        User currentUser = userMapper.selectById(currentUserId);
+        if (currentUser != null && currentUser.getRole() == UserRoleEnum.ADMIN) {
+            return kb;
+        }
+
+        if (!currentUserId.equals(kb.getCreatorId())) {
             throw BizException.of(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
         }
         return kb;

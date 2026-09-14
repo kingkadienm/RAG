@@ -1,8 +1,14 @@
 package com.wangzs.rag.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
+import com.wangzs.rag.common.exception.BizException;
+import com.wangzs.rag.common.exception.ErrorCode;
 import com.wangzs.rag.common.result.ApiResult;
+import com.wangzs.rag.common.util.AuthUtil;
+import com.wangzs.rag.enums.UserRoleEnum;
+import com.wangzs.rag.mapper.UserMapper;
 import com.wangzs.rag.model.entity.Document;
+import com.wangzs.rag.model.entity.User;
 import com.wangzs.rag.service.DocumentService;
 import com.wangzs.rag.chunk.Chunk;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,6 +33,7 @@ import java.util.Map;
 public class DocumentController {
 
     private final DocumentService documentService;
+    private final UserMapper userMapper;
 
     // ==================== 查询接口 ====================
 
@@ -37,6 +44,7 @@ public class DocumentController {
     @GetMapping("/{id}")
     public ApiResult<Document> getById(@PathVariable Long id) {
         Document doc = documentService.getById(id);
+        verifyDocumentAccess(doc);
         return ApiResult.success(doc);
     }
 
@@ -46,6 +54,8 @@ public class DocumentController {
     @Operation(summary = "查询文档分块内容")
     @GetMapping("/{id}/chunks")
     public ApiResult<List<Chunk>> getChunks(@PathVariable Long id) {
+        Document doc = documentService.getById(id);
+        verifyDocumentAccess(doc);
         List<Chunk> chunks = documentService.getChunks(id);
         return ApiResult.success(chunks);
     }
@@ -97,5 +107,19 @@ public class DocumentController {
     public ApiResult<Void> delete(@PathVariable Long id) {
         documentService.deleteWithFile(id);
         return ApiResult.success(null, "删除成功");
+    }
+
+    // ==================== 私有辅助方法 ====================
+
+    /**
+     * 校验当前用户是否有权限访问该文档（Admin 可访问所有，普通用户只能访问自己的）
+     */
+    private void verifyDocumentAccess(Document doc) {
+        Long currentUserId = AuthUtil.getLoginUserId();
+        User currentUser = userMapper.selectById(currentUserId);
+        boolean isAdmin = currentUser != null && currentUser.getRole() == UserRoleEnum.ADMIN;
+        if (!isAdmin && !currentUserId.equals(doc.getCreatorId())) {
+            throw BizException.of(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
     }
 }
